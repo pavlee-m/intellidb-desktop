@@ -74,6 +74,16 @@ async function initDatabase() {
       INSERT INTO Settings (Key, Value) VALUES
       ('theme', 'light');
     `);
+
+    await db.exec(`
+      INSERT INTO Settings (Key, Value) VALUES
+      ('opencode_integration_enabled', 'false');
+    `);
+
+    await db.exec(`
+      INSERT INTO Settings (Key, Value) VALUES
+      ('opencode_binary', 'opencode');
+    `);
   }
 }
 

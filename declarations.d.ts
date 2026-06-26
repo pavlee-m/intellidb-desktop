@@ -1,8 +1,11 @@
 declare module '*.css';
+declare module '*.svg';
+
+type Settings = import('./src/interfaces/Settings').default;
 
 interface Window {
   settingsApi: {
-    getSettings: () => Promise<{ theme: 'light' | 'dark' }>;
-    updateSetting: (key: string, value: string) => Promise<{ theme: 'light' | 'dark' }>;
+    getSettings: () => Promise<Settings>;
+    updateSetting: (key: string, value: string) => Promise<Settings>;
   };
 }

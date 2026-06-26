@@ -19,11 +19,23 @@ class DBManager {
     for (const row of rows) {
       if (row.key === 'theme' && (row.value === 'light' || row.value === 'dark')) {
         settingsObject.theme = row.value;
+        continue;
+      }
+
+      if (row.key === 'opencode_integration_enabled') {
+        settingsObject.opencode_integration_enabled = row.value === 'true';
+        continue;
+      }
+
+      if (row.key === 'opencode_binary') {
+        settingsObject.opencode_binary = row.value;
       }
     }
 
     return {
       theme: settingsObject.theme ?? 'light',
+      opencode_integration_enabled: settingsObject.opencode_integration_enabled ?? true,
+      opencode_binary: settingsObject.opencode_binary ?? 'opencode',
     };
   }
 

@@ -26,7 +26,7 @@ function Index() {
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton asChild variant="outline" size="lg" className="justify-start">
-                <Link to="/settings">
+                <Link to="/settings/general">
                   <Settings />
                   <span>Settings</span>
                 </Link>

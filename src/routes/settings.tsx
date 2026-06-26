@@ -1,73 +1,74 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { ArrowLeft, Moon, Sun } from 'lucide-react'
-import { Button } from '../components/ui/button'
-import { useEffect, useState } from 'react'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from '@/components/ui/sidebar'
+import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
+import { ArrowLeft, Plug, Settings2 } from 'lucide-react'
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
 })
 
-function getInitialTheme(): 'light' | 'dark' {
-  if (typeof window === 'undefined') {
-    return 'light'
-  }
-  return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-}
-
 function SettingsPage() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme)
-
-  useEffect(() => {
-    void window.settingsApi.getSettings().then((settings) => {
-      setTheme(settings.theme)
-      document.documentElement.classList.toggle('dark', settings.theme === 'dark')
-    })
-  }, [])
-
-  const toggleTheme = () => {
-    setTheme((currentTheme) => {
-      const nextTheme = currentTheme === 'light' ? 'dark' : 'light'
-      document.documentElement.classList.toggle('dark', nextTheme === 'dark')
-      window.settingsApi.updateSetting('theme', nextTheme)
-      return nextTheme
-    })
-  }
+  const matchRoute = useMatchRoute()
+  const isGeneralActive = !!matchRoute({ to: '/settings/general' })
+  const isIntegrationsActive = !!matchRoute({ to: '/settings/integrations' })
 
   return (
-    <main className="min-h-svh bg-background p-6 text-foreground">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-        <header className="flex items-center justify-between rounded-xl border bg-card p-4 shadow-sm">
-          <h1 className="text-lg font-semibold">Settings</h1>
-          <Button asChild variant="outline" size="sm">
-            <Link to="/">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Home
-            </Link>
-          </Button>
-        </header>
-
-        <section className="rounded-xl border bg-card p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="font-medium">Theme</h2>
-              <p className="text-sm text-muted-foreground">Current theme: {theme}</p>
-            </div>
-            <Button onClick={toggleTheme} variant="secondary">
-              {theme === 'light' ? (
-                <>
-                  <Moon className="mr-2 h-4 w-4" />
-                  Switch to Dark
-                </>
-              ) : (
-                <>
-                  <Sun className="mr-2 h-4 w-4" />
-                  Switch to Light
-                </>
-              )}
-            </Button>
+    <SidebarProvider>
+      <Sidebar>
+        <SidebarContent>
+          <SidebarMenu>
+            <SidebarMenuItem className="mx-5 mt-5">
+              <SidebarMenuButton asChild isActive={isGeneralActive}>
+                <Link to="/settings/general">
+                  <Settings2 className="h-4 w-4" />
+                  <span>General</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem className="mx-5 my-2">
+              <SidebarMenuButton asChild isActive={isIntegrationsActive}>
+                <Link to="/settings/integrations">
+                  <Plug className="h-4 w-4" />
+                  <span>Integrations</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarContent>
+        <SidebarFooter className="mt-auto border-t">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild variant="outline" size="lg" className="justify-start">
+                <Link to="/">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  <span>Back</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarFooter>
+      </Sidebar>
+      <SidebarInset>
+        <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
+          <div className="grid h-14 grid-cols-[auto_1fr_auto] items-center px-4">
+            <SidebarTrigger />
+            <h1 className="text-center text-sm font-semibold tracking-wide">Settings</h1>
+            <span className="h-9 w-9" aria-hidden="true" />
           </div>
-        </section>
-      </div>
-    </main>
+        </header>
+        <main className="min-h-svh bg-background p-6 text-foreground">
+          <Outlet />
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
