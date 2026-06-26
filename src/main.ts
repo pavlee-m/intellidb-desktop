@@ -1,10 +1,80 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import started from 'electron-squirrel-startup';
+import { open } from 'sqlite';
+import sqlite3 from 'sqlite3';
+import DBManager from './lib/DBManager';
+import Settings from './interfaces/Settings';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();
+}
+
+let dbManager: DBManager;
+let settings: Settings;
+
+async function initDatabase() {
+  const dbPath = path.join(os.homedir(), '.intellidb', 'config.db');
+  await fs.promises.mkdir(path.join(os.homedir(), '.intellidb'), { recursive: true });
+  const dbExists = fs.existsSync(dbPath);
+
+  const db = await open({
+    filename: dbPath,
+    driver: sqlite3.Database,
+  });
+
+  dbManager = new DBManager(db);
+
+  // Check if sqlite database exists, if not create it
+  if (!dbExists) {
+    // Create tables
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS Settings (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Key TEXT NOT NULL UNIQUE,
+        Value TEXT NOT NULL
+      );
+    `)
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS Connection (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Name TEXT NOT NULL,
+        DBMS TEXT NOT NULL,
+        Host TEXT NOT NULL,
+        Username TEXT NOT NULL,
+        Password TEXT NOT NULL,
+        Database TEXT NOT NULL,
+        sqlalchemy_query TEXT
+      );
+    `);
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS Chat (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        ConnectionID INTEGER NOT NULL,
+        Name TEXT NOT NULL,
+        CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (ConnectionID) REFERENCES Connection(ID) ON DELETE CASCADE
+      );
+    `);
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS Message (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        ChatID INTEGER NOT NULL,
+        Role TEXT NOT NULL,
+        Content TEXT NOT NULL,
+        CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (ChatID) REFERENCES Chat(ID) ON DELETE CASCADE
+      );
+    `);
+    // Insert default settings
+    await db.exec(`
+      INSERT INTO Settings (Key, Value) VALUES
+      ('theme', 'light');
+    `);
+  }
 }
 
 const createWindow = () => {
@@ -33,7 +103,22 @@ const createWindow = () => {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', createWindow);
+app.on('ready', async () => {
+  await initDatabase();
+  settings = await dbManager.getSettings();
+
+  ipcMain.handle('settings:get', async () => {
+    return settings;
+  });
+
+  ipcMain.handle('settings:update', async (_event, key: string, value: string) => {
+    await dbManager.updateSetting(key, value);
+    settings = await dbManager.getSettings();
+    return settings;
+  });
+
+  createWindow();
+});
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits

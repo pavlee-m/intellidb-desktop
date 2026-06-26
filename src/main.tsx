@@ -9,6 +9,14 @@ import { routeTree } from './routeTree.gen'
 // Create a new router instance
 const router = createRouter({ routeTree })
 
+async function applyThemeFromSettings() {
+  if (!window.settingsApi) {
+    return
+  }
+  const settings = await window.settingsApi.getSettings()
+  document.documentElement.classList.toggle('dark', settings.theme === 'dark')
+}
+
 // Register the router instance for type safety
 declare module '@tanstack/react-router' {
   interface Register {
@@ -18,11 +26,14 @@ declare module '@tanstack/react-router' {
 
 // Render the app
 const rootElement = document.getElementById('root')!
-if (!rootElement.innerHTML) {
-  const root = ReactDOM.createRoot(rootElement)
-  root.render(
-    <StrictMode>
-      <RouterProvider router={router} />
-    </StrictMode>,
-  )
-}
+
+void applyThemeFromSettings().finally(() => {
+  if (!rootElement.innerHTML) {
+    const root = ReactDOM.createRoot(rootElement)
+    root.render(
+      <StrictMode>
+        <RouterProvider router={router} />
+      </StrictMode>,
+    )
+  }
+})
