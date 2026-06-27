@@ -118,9 +118,26 @@ const createWindow = () => {
 app.on('ready', async () => {
   await initDatabase();
   settings = await dbManager.getSettings();
+  connections = await dbManager.getConnections();
 
   ipcMain.handle('settings:get', async () => {
     return settings;
+  });
+
+  ipcMain.handle('connections:get', async () => {
+    return connections;
+  });
+
+  ipcMain.handle('connections:add', async (_event, connection: Omit<Connection, 'id'>) => {
+    await dbManager.addConnection(connection);
+    connections = await dbManager.getConnections();
+    return connections;
+  });
+
+  ipcMain.handle('connections:delete', async (_event, connectionId: number) => {
+    await dbManager.deleteConnection(connectionId);
+    connections = await dbManager.getConnections();
+    return connections;
   });
 
   ipcMain.handle('settings:update', async (_event, key: string, value: string) => {

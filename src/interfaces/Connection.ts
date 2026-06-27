@@ -1,12 +1,12 @@
 interface Connection {
-  ID: number;
-  Name: string;
-  DBMS: string;
-  Host: string;
-  Username: string;
-  Password: string;
-  Database: string;
-  sqlalchemy_query?: Object;
+  id: number
+  name: string
+  dbms: string
+  host: string
+  username: string
+  password: string
+  database: string
+  sqlalchemy_query?: Record<string, string>
 }
 
-export default Connection;
+export default Connection

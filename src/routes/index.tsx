@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { ChevronDownIcon, Plus, Search, Settings, XIcon } from 'lucide-react'
+import { ChevronDownIcon, Database, Plus, Search, Settings, XIcon } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -20,6 +20,10 @@ import { Input } from '@/components/ui/input'
 import { useForm } from '@tanstack/react-form'
 import { z } from 'zod'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { useEffect, useState } from 'react'
+import type Connection from '@/interfaces/Connection'
+import mssqlLogo from '@/assets/microsoft-sql-server.svg'
+import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 
 const formSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -32,16 +36,53 @@ const formSchema = z.object({
     z.object({
       key: z.string(),
       value: z.string(),
-    }),)
+    }),
+  ),
 })
+
+function getDbmsLogo(dbms: string): { src?: string; alt: string } {
+  const normalizedDbms = dbms.trim().toLowerCase()
+
+  if (normalizedDbms === 'mssql' || normalizedDbms === 'sqlserver' || normalizedDbms === 'sql server') {
+    return { src: mssqlLogo, alt: 'MS SQL Server' }
+  }
+
+  return { alt: dbms }
+}
 
 export const Route = createFileRoute('/')({
   component: Index,
 })
 
 function Index() {
+  const [connections, setConnections] = useState<Connection[]>([])
+  const [isCreateDialogOpen, setCreateDialogOpen] = useState(false)
+  const [connectionPendingDelete, setConnectionPendingDelete] = useState<Connection | null>(null)
+  const [isDeletingConnection, setIsDeletingConnection] = useState(false)
+
   const handleSearchClick = () => {
     console.log('Search clicked')
+  }
+
+  useEffect(() => {
+    window.connectionsApi.getConnections().then(setConnections).catch(console.error)
+  }, [])
+
+  const handleDeleteConnection = async () => {
+    if (!connectionPendingDelete) {
+      return
+    }
+
+    setIsDeletingConnection(true)
+    try {
+      const updatedConnections = await window.connectionsApi.deleteConnection(connectionPendingDelete.id)
+      setConnections(updatedConnections)
+      setConnectionPendingDelete(null)
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setIsDeletingConnection(false)
+    }
   }
 
   const createSettingsForm = useForm({
@@ -57,11 +98,28 @@ function Index() {
     validators: {
       onChange: formSchema,
     },
-    onSubmit: ({ value }) => {
-      if (value.query_values.length === 1 && value.query_values[0].key === "" && value.query_values[0].value === "") {
-        value.query_values = []
-      }
-      console.log('Form submitted with values:', value)
+    onSubmit: async ({ value }) => {
+      const queryValues = value.query_values.filter(
+        ({ key, value: queryValue }) => key.trim() !== '' && queryValue.trim() !== '',
+      )
+
+      const sqlalchemyQuery = Object.fromEntries(
+        queryValues.map(({ key, value: queryValue }) => [key.trim(), queryValue.trim()]),
+      )
+
+      const updatedConnections = await window.connectionsApi.addConnection({
+        name: value.name,
+        dbms: value.DBMS,
+        host: value.host,
+        username: value.username,
+        password: value.password,
+        database: value.database,
+        sqlalchemy_query: sqlalchemyQuery,
+      })
+
+      setConnections(updatedConnections)
+      setCreateDialogOpen(false)
+      createSettingsForm.reset()
     },
   })
 
@@ -81,8 +139,8 @@ function Index() {
             </Button>
 
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium">Projects</p>
-              <Dialog>
+              <p className="text-sm font-medium">Connections</p>
+              <Dialog open={isCreateDialogOpen} onOpenChange={setCreateDialogOpen}>
                 <DialogTrigger asChild>
                   <Button type="button" size="icon" variant="ghost" aria-label="Add connection">
                     <Plus className="h-4 w-4" />
@@ -363,7 +421,46 @@ function Index() {
               </Dialog>
             </div>
           </SidebarHeader>
-          <SidebarContent />
+          <SidebarContent>
+            <SidebarMenu>
+              {connections.map((connection) => {
+                const logo = getDbmsLogo(connection.dbms)
+                return (
+                  <SidebarMenuItem key={connection.id}>
+                    <ContextMenu>
+                      <ContextMenuTrigger className="flex w-full max-w-xs justify-center rounded-xl border border-dashed text-sm">
+                        <SidebarMenuButton className="justify-start gap-2" type="button">
+                            {logo.src ? (
+                              <img
+                                src={logo.src}
+                                alt={logo.alt}
+                                className="h-4 w-4 shrink-0"
+                              />
+                            ) : (
+                              <Database className="h-4 w-4 shrink-0" aria-hidden="true" />
+                            )}
+                            <span className="truncate">{connection.name}</span>
+                        </SidebarMenuButton>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent>
+                          <ContextMenuGroup>
+                            <ContextMenuItem
+                              onSelect={(event) => {
+                                event.preventDefault()
+                                setConnectionPendingDelete(connection)
+                              }}
+                            >
+                              Delete
+                            </ContextMenuItem>
+                            <ContextMenuItem>Edit</ContextMenuItem>
+                          </ContextMenuGroup>
+                        </ContextMenuContent>
+                    </ContextMenu>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarContent>
           <SidebarFooter className="mt-auto border-t">
             <SidebarMenu>
               <SidebarMenuItem>
@@ -390,6 +487,41 @@ function Index() {
           </main>
         </SidebarInset>
       </SidebarProvider>
+
+      <Dialog
+        open={Boolean(connectionPendingDelete)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingConnection) {
+            setConnectionPendingDelete(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete connection</DialogTitle>
+            <DialogDescription>
+              {connectionPendingDelete
+                ? `This will permanently delete "${connectionPendingDelete.name}".`
+                : 'This will permanently delete this connection.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline" disabled={isDeletingConnection}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteConnection}
+              disabled={isDeletingConnection}
+            >
+              {isDeletingConnection ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

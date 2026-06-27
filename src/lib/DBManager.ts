@@ -1,9 +1,61 @@
-import Settings from '../interfaces/Settings';
+import Settings from '@/interfaces/Settings';
 import SettingsModel from '../models/SettingsModel';
 import { Database } from 'sqlite';
+import Connection from '@/interfaces/Connection';
+
+type ConnectionRow = Omit<Connection, 'sqlalchemy_query'> & {
+  sqlalchemy_query: string | null;
+};
 
 class DBManager {
   constructor(private readonly db: Database) {}
+
+  async getConnections(): Promise<Connection[]> {
+    const rows = await this.db.all<ConnectionRow[]>(`
+      SELECT
+        ID AS id,
+        Name AS name,
+        DBMS AS dbms,
+        Host AS host,
+        Username AS username,
+        Password AS password,
+        Database AS database,
+        sqlalchemy_query AS sqlalchemy_query
+      FROM Connection;
+    `);
+
+    return rows.map((row) => ({
+      ...row,
+      sqlalchemy_query: parseSqlalchemyQuery(row.sqlalchemy_query),
+    }));
+  }
+
+  async addConnection(connection: Omit<Connection, 'id'>): Promise<void> {
+    await this.db.run(
+      `
+        INSERT INTO Connection (Name, DBMS, Host, Username, Password, Database, sqlalchemy_query)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
+      `,
+      [
+        connection.name,
+        connection.dbms,
+        connection.host,
+        connection.username,
+        connection.password,
+        connection.database,
+        JSON.stringify(connection.sqlalchemy_query || {}),
+      ],
+    );
+  }
+
+  async deleteConnection(connectionId: number): Promise<void> {
+    await this.db.run(
+      `
+        DELETE FROM Connection WHERE ID = ?;
+      `,
+      [connectionId],
+    );
+  }
 
   async getSettings(): Promise<Settings> {
     const rows = await this.db.all<SettingsModel[]>(`
@@ -48,6 +100,26 @@ class DBManager {
       `,
       [key, value],
     );
+  }
+}
+
+function parseSqlalchemyQuery(rawValue: string | null): Record<string, string> {
+  if (!rawValue) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(rawValue);
+
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).map(([key, value]) => [key, String(value)]),
+    );
+  } catch {
+    return {};
   }
 }
 
