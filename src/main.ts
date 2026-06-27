@@ -7,6 +7,7 @@ import { open } from 'sqlite';
 import sqlite3 from 'sqlite3';
 import DBManager from './lib/DBManager';
 import Settings from './interfaces/Settings';
+import Connection from './interfaces/Connection';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -15,6 +16,7 @@ if (started) {
 
 let dbManager: DBManager;
 let settings: Settings;
+let connections: Connection[] = [];
 
 async function initDatabase() {
   const dbPath = path.join(os.homedir(), '.intellidb', 'config.db');
