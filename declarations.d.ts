@@ -13,5 +13,6 @@ interface Window {
     getConnections: () => Promise<Connection[]>;
     addConnection: (connection: Omit<Connection, 'id'>) => Promise<Connection[]>;
     deleteConnection: (connectionId: number) => Promise<Connection[]>;
+    editConnection: (connection: Connection) => Promise<Connection[]>;
   };
 }

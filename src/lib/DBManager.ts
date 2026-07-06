@@ -48,6 +48,33 @@ class DBManager {
     );
   }
 
+  async editConnection(connection: Connection): Promise<void> {
+    await this.db.run(
+      `
+        UPDATE Connection
+        SET
+          Name = ?,
+          DBMS = ?,
+          Host = ?,
+          Username = ?,
+          Password = ?,
+          Database = ?,
+          sqlalchemy_query = ?
+        WHERE ID = ?;
+      `,
+      [
+        connection.name,
+        connection.dbms,
+        connection.host,
+        connection.username,
+        connection.password,
+        connection.database,
+        JSON.stringify(connection.sqlalchemy_query || {}),
+        connection.id,
+      ],
+    );
+  }
+
   async deleteConnection(connectionId: number): Promise<void> {
     await this.db.run(
       `

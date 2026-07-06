@@ -140,6 +140,12 @@ app.on('ready', async () => {
     return connections;
   });
 
+  ipcMain.handle('connections:edit', async (_event, connection: Connection) => {
+    await dbManager.editConnection(connection);
+    connections = await dbManager.getConnections();
+    return connections;
+  })
+
   ipcMain.handle('settings:update', async (_event, key: string, value: string) => {
     await dbManager.updateSetting(key, value);
     settings = await dbManager.getSettings();
