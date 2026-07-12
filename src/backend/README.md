@@ -1,0 +1,1 @@
+This folder should contain a sqlmcp.bin, compiled version of the sqlmcp backend.

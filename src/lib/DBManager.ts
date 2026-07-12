@@ -128,6 +128,11 @@ class DBManager {
       [key, value],
     );
   }
+
+  async closeConnection(): Promise<void> {
+    await this.db.close();
+  }
+
 }
 
 function parseSqlalchemyQuery(rawValue: string | null): Record<string, string> {
@@ -148,6 +153,7 @@ function parseSqlalchemyQuery(rawValue: string | null): Record<string, string> {
   } catch {
     return {};
   }
+
 }
 
 export default DBManager;

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { Database, Plus, Search, Settings } from 'lucide-react'
+import { ChevronDownIcon, Database, Plus, Search, Settings } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -19,6 +19,7 @@ import mssqlLogo from '@/assets/microsoft-sql-server.svg'
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import DeleteConnectionDialog from '@/components/index/DeleteConnectionDialog'
 import ConnectionDialog from '@/components/index/ConnectionDialog'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 function getDbmsLogo(dbms: string): { src?: string; alt: string } {
   const normalizedDbms = dbms.trim().toLowerCase()
@@ -103,9 +104,11 @@ function Index() {
                 return (
                   <SidebarMenuItem key={connection.id}>
                     <ContextMenu>
-                      <ContextMenuTrigger className="flex w-full max-w-xs justify-center rounded-xl border border-dashed text-sm">
-                        <SidebarMenuButton className="justify-start gap-2" type="button">
-                            {logo.src ? (
+                      <ContextMenuTrigger className="flex w-full justify-center rounded-xl text-sm">
+                        <Collapsible className=" w-full rounded-md data-[state=open]:bg-muted">
+                          <CollapsibleTrigger asChild>
+                            <Button variant="ghost" className="group w-full">
+                              {logo.src ? (
                               <img
                                 src={logo.src}
                                 alt={logo.alt}
@@ -115,7 +118,24 @@ function Index() {
                               <Database className="h-4 w-4 shrink-0" aria-hidden="true" />
                             )}
                             <span className="truncate">{connection.name}</span>
-                        </SidebarMenuButton>
+                            <ChevronDownIcon className="ml-auto group-data-[state=open]:rotate-180" />
+                            </Button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="flex flex-col items-start gap-2 p-2.5 pt-0 text-sm">
+                            <ul>
+                              <li>
+                                <Link to={`/connections/${connection.id}`}>
+                                  {connection.name}
+                                  </Link>
+                                </li>
+                              <li>  
+                                <Link to={`/connections/${connection.id}`}>
+                                  {connection.name}
+                                </Link>
+                              </li>
+                            </ul>
+                          </CollapsibleContent>
+                        </Collapsible>
                         </ContextMenuTrigger>
                         <ContextMenuContent>
                           <ContextMenuGroup>

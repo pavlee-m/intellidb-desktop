@@ -2,12 +2,14 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
+import { promisify } from 'node:util';
 import started from 'electron-squirrel-startup';
 import { open } from 'sqlite';
 import sqlite3 from 'sqlite3';
 import DBManager from './lib/DBManager';
 import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
+import { ChildProcess, execFile, spawn } from 'node:child_process';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -17,6 +19,10 @@ if (started) {
 let dbManager: DBManager;
 let settings: Settings;
 let connections: Connection[] = [];
+let backendProcess: ChildProcess;
+
+const BACKEND_URL = 'http://localhost:8000';
+const execFileAsync = promisify(execFile);
 
 async function initDatabase() {
   const dbPath = path.join(os.homedir(), '.intellidb', 'config.db');
@@ -89,7 +95,84 @@ async function initDatabase() {
   }
 }
 
-const createWindow = () => {
+function getBackendDir(): string {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'backend');
+  }
+
+  return path.join(__dirname, 'backend');
+}
+
+async function waitUntilBackendResponsive(): Promise<boolean> {
+  let noOfRetries = 0;
+
+  return new Promise<boolean>((resolve) => {
+    const id = setInterval(async () => {
+      try {
+        const data = await fetch(`${BACKEND_URL}/connections`);
+        if (data.ok) {
+          clearInterval(id);
+          resolve(true);
+          return;
+        }
+
+        noOfRetries++;
+        if (noOfRetries >= 5) {
+          clearInterval(id);
+          resolve(false);
+        }
+      } catch {
+        noOfRetries++;
+        if (noOfRetries >= 5) {
+          clearInterval(id);
+          resolve(false);
+        }
+      }
+    }, 500);
+  });
+}
+
+
+async function startBackend(): Promise<boolean> {
+  const backendDir = getBackendDir();
+  const backendPath = path.join(backendDir, 'sqlmcp.bin');
+
+  if (!backendProcess || backendProcess.killed || backendProcess.exitCode !== null) {
+    if (!fs.existsSync(backendPath)) {
+      console.error('Backend binary not found:', backendPath);
+      return false;
+    }
+
+    backendProcess = spawn(backendPath, [], {
+      cwd: backendDir,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
+    });
+
+    backendProcess.on('error', (err) => {
+      console.error('Failed to start backend:', err);
+    });
+
+    backendProcess.once('exit', (code) => {
+      if (code !== 0 && code !== null) {
+        console.error('Backend exited immediately with code', code);
+      }
+    });
+
+    if (!backendProcess.pid) {
+      return false;
+    }
+  }
+
+  const ok = await waitUntilBackendResponsive();
+  if (ok) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+const createWindow = async () => {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
     width: 800,
@@ -109,50 +192,106 @@ const createWindow = () => {
   }
 
   // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+  // mainWindow.webContents.openDevTools();
 };
+
+function waitForExit(child: ChildProcess): Promise<void> {
+  return new Promise((resolve) => {
+    if (child.exitCode !== null) return resolve();
+    child.once('exit', () => resolve());
+  });
+}
+
+async function killProcessTree(child: ChildProcess): Promise<void> {
+  if (!child.pid || child.exitCode !== null) {
+    return;
+  }
+
+  const pid = child.pid;
+
+  if (process.platform === 'win32') {
+    await execFileAsync('taskkill', ['/pid', String(pid), '/T', '/F']);
+    return;
+  }
+
+  process.kill(-pid, 'SIGKILL');
+  await waitForExit(child);
+}
+
+app.on('before-quit', async (event) => {
+  event.preventDefault();
+
+  try {
+    await dbManager.closeConnection();
+
+    if (backendProcess) {
+      await killProcessTree(backendProcess);
+    }
+  }
+  catch (e) {
+    console.log(e);
+  }
+  finally {
+    app.exit(0);
+  }
+});
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', async () => {
-  await initDatabase();
-  settings = await dbManager.getSettings();
-  connections = await dbManager.getConnections();
+  try {
+    if (!await startBackend()) {
+      console.error('Failed to start backend');
+      app.quit();
+      return;
+    }
 
-  ipcMain.handle('settings:get', async () => {
-    return settings;
-  });
+    const response = await fetch(`${BACKEND_URL}/connections`);
+    const data = await response.json();
+    console.log(data);
 
-  ipcMain.handle('connections:get', async () => {
-    return connections;
-  });
-
-  ipcMain.handle('connections:add', async (_event, connection: Omit<Connection, 'id'>) => {
-    await dbManager.addConnection(connection);
-    connections = await dbManager.getConnections();
-    return connections;
-  });
-
-  ipcMain.handle('connections:delete', async (_event, connectionId: number) => {
-    await dbManager.deleteConnection(connectionId);
-    connections = await dbManager.getConnections();
-    return connections;
-  });
-
-  ipcMain.handle('connections:edit', async (_event, connection: Connection) => {
-    await dbManager.editConnection(connection);
-    connections = await dbManager.getConnections();
-    return connections;
-  })
-
-  ipcMain.handle('settings:update', async (_event, key: string, value: string) => {
-    await dbManager.updateSetting(key, value);
+    await initDatabase();
     settings = await dbManager.getSettings();
-    return settings;
-  });
+    connections = await dbManager.getConnections();
 
-  createWindow();
+    ipcMain.handle('settings:get', async () => {
+      return settings;
+    });
+
+    ipcMain.handle('connections:get', async () => {
+      return connections;
+    });
+
+    ipcMain.handle('connections:add', async (_event, connection: Omit<Connection, 'id'>) => {
+      await dbManager.addConnection(connection);
+      connections = await dbManager.getConnections();
+      return connections;
+    });
+
+    ipcMain.handle('connections:delete', async (_event, connectionId: number) => {
+      await dbManager.deleteConnection(connectionId);
+      connections = await dbManager.getConnections();
+      return connections;
+    });
+
+    ipcMain.handle('connections:edit', async (_event, connection: Connection) => {
+      await dbManager.editConnection(connection);
+      connections = await dbManager.getConnections();
+      return connections;
+    });
+
+    ipcMain.handle('settings:update', async (_event, key: string, value: string) => {
+      await dbManager.updateSetting(key, value);
+      settings = await dbManager.getSettings();
+      return settings;
+    });
+
+    await createWindow();
+  } catch (err) {
+    console.error('Failed to initialize app:', err);
+    app.quit();
+  }
 });
 
 // Quit when all windows are closed, except on macOS. There, it's common
@@ -168,7 +307,7 @@ app.on('activate', () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
+    void createWindow();
   }
 });
 
