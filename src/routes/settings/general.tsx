@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Moon, Sun } from 'lucide-react'
 import { useEffect, useState } from 'react'
-
 import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('/settings/general')({

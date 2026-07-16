@@ -3,7 +3,6 @@ import { ChevronDownIcon, XIcon } from 'lucide-react'
 import { useEffect } from 'react'
 import { z } from 'zod'
 import type Connection from '@/interfaces/Connection'
-import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
@@ -46,6 +45,7 @@ interface ConnectionDialogProps {
   open: boolean
   editedConnection: Connection | null
   onOpenChange: (open: boolean) => void
+  onSubmit: (connection: Omit<Connection, 'id'>) => Promise<void>
   setConnectionPendingEdit: (connection: Connection | null) => void
 }
 
@@ -53,10 +53,9 @@ export default function ConnectionDialog({
   open,
   editedConnection,
   onOpenChange,
+  onSubmit,
   setConnectionPendingEdit,
 }: ConnectionDialogProps) {
-  const addConnection = useBackendConnectionStore((state) => state.addConnection)
-  const editConnection = useBackendConnectionStore((state) => state.editConnection)
   const connectionForm = useForm({
     defaultValues: {
       name: '',
@@ -79,42 +78,15 @@ export default function ConnectionDialog({
         queryValues.map(({ key, value: queryValue }) => [key.trim(), queryValue.trim()]),
       )
 
-      if (!editedConnection) {
-        const connectionToAdd = {
-          name: value.name,
-          dbms: value.DBMS,
-          host: value.host,
-          username: value.username,
-          password: value.password,
-          database: value.database,
-          sqlalchemy_query: sqlalchemyQuery,
-        }
-
-        const newId = await window.connectionsApi.addConnection(connectionToAdd)
-        const newConnection: Connection = { ...connectionToAdd, id: newId }
-
-        addConnection({
-          connection: newConnection,
-          backendConnectionId: String(newId),
-        })
-      }
-      else {
-        let newConnection:Connection = {
-          name: value.name,
-          dbms: value.DBMS,
-          host: value.host,
-          username: value.username,
-          password: value.password,
-          database: value.database,
-          sqlalchemy_query: sqlalchemyQuery,
-          id: editedConnection.id,
-        }
-        await window.connectionsApi.editConnection(newConnection);
-        editConnection({
-          backendConnectionId: "",
-          connection: newConnection,
-        })
-      }
+      await onSubmit({
+        name: value.name,
+        dbms: value.DBMS,
+        host: value.host,
+        username: value.username,
+        password: value.password,
+        database: value.database,
+        sqlalchemy_query: sqlalchemyQuery,
+      })
       onOpenChange(false)
     },
   })

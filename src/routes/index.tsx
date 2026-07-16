@@ -39,6 +39,8 @@ export const Route = createFileRoute('/')({
 function Index() {
   const connections = useBackendConnectionStore((state) => state.backendConnections)
   const setConnections = useBackendConnectionStore((state) => state.setConnections)
+  const addConnection = useBackendConnectionStore((state) => state.addConnection)
+  const editConnection = useBackendConnectionStore((state) => state.editConnection)
   const deleteConnection = useBackendConnectionStore((state) => state.deleteConnection)
   const [isConnectionDialogOpen, setIsConnectionDialogOpen] = useState(false)
   const [connectionPendingDelete, setConnectionPendingDelete] = useState<Connection | null>(null)
@@ -78,6 +80,28 @@ function Index() {
     } finally {
       setIsDeletingConnection(false)
     }
+  }
+
+  const handleConnectionSubmit = async (connection: Omit<Connection, 'id'>) => {
+    if (!connectionPendingEdit) {
+      const newId = await window.connectionsApi.addConnection(connection)
+
+      addConnection({
+        backendConnectionId: String(newId),
+        connection: { ...connection, id: newId },
+      })
+      return
+    }
+
+    const updatedConnection: Connection = {
+      ...connection,
+      id: connectionPendingEdit.id,
+    }
+    await window.connectionsApi.editConnection(updatedConnection)
+    editConnection({
+      backendConnectionId: String(updatedConnection.id),
+      connection: updatedConnection,
+    })
   }
 
   return (
@@ -213,6 +237,7 @@ function Index() {
         open={isConnectionDialogOpen}
         editedConnection={connectionPendingEdit}
         onOpenChange={setIsConnectionDialogOpen}
+        onSubmit={handleConnectionSubmit}
         setConnectionPendingEdit={setConnectionPendingEdit}
       />
     </>
