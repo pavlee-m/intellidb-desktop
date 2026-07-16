@@ -246,15 +246,12 @@ app.on('ready', async () => {
       app.quit();
       return;
     }
-
     const response = await fetch(`${BACKEND_URL}/connections`);
     const data = await response.json();
     console.log(data);
-
     await initDatabase();
     settings = await dbManager.getSettings();
     connections = await dbManager.getConnections();
-
     ipcMain.handle('settings:get', async () => {
       return settings;
     });
@@ -264,21 +261,16 @@ app.on('ready', async () => {
     });
 
     ipcMain.handle('connections:add', async (_event, connection: Omit<Connection, 'id'>) => {
-      await dbManager.addConnection(connection);
-      connections = await dbManager.getConnections();
-      return connections;
+      const id:number = await dbManager.addConnection(connection);
+      return id;
     });
 
     ipcMain.handle('connections:delete', async (_event, connectionId: number) => {
       await dbManager.deleteConnection(connectionId);
-      connections = await dbManager.getConnections();
-      return connections;
     });
 
     ipcMain.handle('connections:edit', async (_event, connection: Connection) => {
       await dbManager.editConnection(connection);
-      connections = await dbManager.getConnections();
-      return connections;
     });
 
     ipcMain.handle('settings:update', async (_event, key: string, value: string) => {

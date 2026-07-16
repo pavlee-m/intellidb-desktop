@@ -1,3 +1,5 @@
+// Represents database connections.
+
 interface Connection {
   id: number
   name: string

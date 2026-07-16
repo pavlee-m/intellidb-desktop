@@ -30,8 +30,8 @@ class DBManager {
     }));
   }
 
-  async addConnection(connection: Omit<Connection, 'id'>): Promise<void> {
-    await this.db.run(
+  async addConnection(connection: Omit<Connection, 'id'>): Promise<number> {
+    const result = await this.db.run(
       `
         INSERT INTO Connection (Name, DBMS, Host, Username, Password, Database, sqlalchemy_query)
         VALUES (?, ?, ?, ?, ?, ?, ?);
@@ -45,9 +45,10 @@ class DBManager {
         connection.database,
         JSON.stringify(connection.sqlalchemy_query || {}),
       ],
-    );
-  }
+    )
 
+    return result.lastID!
+  }
   async editConnection(connection: Connection): Promise<void> {
     await this.db.run(
       `

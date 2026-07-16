@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useEffect, useState } from 'react'
 import type Connection from '@/interfaces/Connection'
+import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import mssqlLogo from '@/assets/microsoft-sql-server.svg'
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import DeleteConnectionDialog from '@/components/index/DeleteConnectionDialog'
@@ -36,7 +37,9 @@ export const Route = createFileRoute('/')({
 })
 
 function Index() {
-  const [connections, setConnections] = useState<Connection[]>([])
+  const connections = useBackendConnectionStore((state) => state.backendConnections)
+  const setConnections = useBackendConnectionStore((state) => state.setConnections)
+  const deleteConnection = useBackendConnectionStore((state) => state.deleteConnection)
   const [isConnectionDialogOpen, setIsConnectionDialogOpen] = useState(false)
   const [connectionPendingDelete, setConnectionPendingDelete] = useState<Connection | null>(null)
   const [isDeletingConnection, setIsDeletingConnection] = useState(false)
@@ -47,7 +50,17 @@ function Index() {
   }
 
   useEffect(() => {
-    window.connectionsApi.getConnections().then(setConnections).catch(console.error)
+    window.connectionsApi
+      .getConnections()
+      .then((loadedConnections) =>
+        setConnections(
+          loadedConnections.map((connection) => ({
+            backendConnectionId: String(connection.id),
+            connection,
+          })),
+        ),
+      )
+      .catch(console.error)
   }, [])
 
   const handleDeleteConnection = async () => {
@@ -57,8 +70,8 @@ function Index() {
 
     setIsDeletingConnection(true)
     try {
-      const updatedConnections = await window.connectionsApi.deleteConnection(connectionPendingDelete.id)
-      setConnections(updatedConnections)
+      await window.connectionsApi.deleteConnection(connectionPendingDelete.id)
+      deleteConnection(String(connectionPendingDelete.id))
       setConnectionPendingDelete(null)
     } catch (error) {
       console.error(error)
@@ -99,10 +112,10 @@ function Index() {
           </SidebarHeader>
           <SidebarContent>
             <SidebarMenu>
-              {connections.map((connection) => {
+              {connections.map(({ backendConnectionId, connection }) => {
                 const logo = getDbmsLogo(connection.dbms)
                 return (
-                  <SidebarMenuItem key={connection.id}>
+                  <SidebarMenuItem key={backendConnectionId}>
                     <ContextMenu>
                       <ContextMenuTrigger className="flex w-full justify-center rounded-xl text-sm">
                         <Collapsible className=" w-full rounded-md data-[state=open]:bg-muted">
@@ -124,14 +137,14 @@ function Index() {
                           <CollapsibleContent className="flex flex-col items-start gap-2 p-2.5 pt-0 text-sm">
                             <ul>
                               <li>
-                                <Link to={`/connections/${connection.id}`}>
+                                <a>
                                   {connection.name}
-                                  </Link>
+                                  </a>
                                 </li>
                               <li>  
-                                <Link to={`/connections/${connection.id}`}>
+                                <a>
                                   {connection.name}
-                                </Link>
+                                </a>
                               </li>
                             </ul>
                           </CollapsibleContent>
@@ -200,7 +213,6 @@ function Index() {
         open={isConnectionDialogOpen}
         editedConnection={connectionPendingEdit}
         onOpenChange={setIsConnectionDialogOpen}
-        onConnectionsChange={setConnections}
         setConnectionPendingEdit={setConnectionPendingEdit}
       />
     </>
