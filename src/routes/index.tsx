@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
-import { ChevronDownIcon, Database, Plus, Search, Settings } from 'lucide-react'
+import { ChevronDownIcon, CirclePlus, Database, Plus, Search, Settings } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -71,6 +71,10 @@ function Index() {
       console.error(error)
       toast.error(error instanceof Error ? error.message : String(error))
     }
+  }
+
+  const createChat = async () => {
+    console.log("created thread")
   }
 
   const handleSearchClick = () => {
@@ -154,27 +158,42 @@ function Index() {
                   <SidebarMenuItem key={backendConnectionId}>
                     <ContextMenu>
                       <ContextMenuTrigger className="flex w-full justify-center rounded-xl text-sm">
-                        <Collapsible className=" w-full rounded-md data-[state=open]:bg-muted">
-                          <CollapsibleTrigger asChild>
-                            <Button variant="ghost" className="group w-full">
-                              {logo.src ? (
-                              <img
-                                src={logo.src}
-                                alt={logo.alt}
-                                className="h-4 w-4 shrink-0"
-                              />
-                            ) : (
-                              <Database className="h-4 w-4 shrink-0" aria-hidden="true" />
-                            )}
-                            <span
-                              aria-label={isConnecting ? 'Connecting' : backendConnectionId ? 'Connected' : 'Disconnected'}
-                              className={`h-2 w-2 shrink-0 rounded-full ${isConnecting ? 'animate-spin border-2 border-muted-foreground border-t-transparent bg-transparent' : backendConnectionId ? 'bg-green-500' : 'bg-red-500'}`}
-                            />
-                            <span className="truncate">{connection.name}</span>
-                            <ChevronDownIcon className="ml-auto group-data-[state=open]:rotate-180" />
-                            </Button>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent className="flex flex-col items-start gap-2 p-2.5 pt-0 text-sm">
+                         <Collapsible className="w-full rounded-md data-[state=open]:bg-muted">
+                           <div className="flex w-full items-center">
+                             <CollapsibleTrigger asChild>
+                               <Button variant="ghost" className="group/connection min-w-0 flex-1 justify-start">
+                               <ChevronDownIcon className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
+                                 {logo.src ? (
+                                   <img
+                                     src={logo.src}
+                                     alt={logo.alt}
+                                     className="h-4 w-4 shrink-0"
+                                   />
+                                 ) : (
+                                   <Database className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                 )}
+                                 <span
+                                   aria-label={isConnecting ? 'Connecting' : backendConnectionId ? 'Connected' : 'Disconnected'}
+                                   className={`h-2 w-2 shrink-0 rounded-full ${isConnecting ? 'animate-spin border-2 border-muted-foreground border-t-transparent bg-transparent' : backendConnectionId ? 'bg-green-500' : 'bg-red-500'}`}
+                                 />
+                                 <span className="truncate">{connection.name}</span>
+                                 <Button
+                                   className="ml-auto invisible scale-95 opacity-0 transition-all duration-200 group-hover/connection:visible group-hover/connection:scale-100 group-hover/connection:opacity-100"
+                                  type="button"
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`Add item to ${connection.name}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      createChat();
+                                    }}
+                                  >
+                                    <CirclePlus className="h-4 w-4 text-muted-foreground" />
+                                  </Button>
+                               </Button>
+                             </CollapsibleTrigger>
+                           </div>
+                           <CollapsibleContent className="flex flex-col items-start gap-2 p-2.5 pt-0 text-sm">
                             <ul>
                               <li>
                                 <a>
@@ -244,7 +263,7 @@ function Index() {
             </div>
           </header>
           <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6">
-            <p className="text-base text-muted-foreground">Home page content goes here.</p>
+            <p className="text-base text-muted-foreground">Select an existing thread or create a new one.</p>
           </main>
         </SidebarInset>
       </SidebarProvider>
@@ -258,7 +277,6 @@ function Index() {
         }}
         onConfirm={handleDeleteConnection}
       />
-
       <ConnectionDialog
         open={isConnectionDialogOpen}
         editedConnection={connectionPendingEdit}
