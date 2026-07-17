@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState, type ChangeEvent } from 'react'
 import { Input } from '@/components/ui/input'
+import useSettingsStore from '@/stores/settingsStore';
 import opencodeLogo from '@/assets/opencode.svg';
 
 export const Route = createFileRoute('/settings/integrations')({
@@ -8,20 +9,19 @@ export const Route = createFileRoute('/settings/integrations')({
 })
 
 function IntegrationsPage() {
-  const [isEnabled, setIsEnabled] = useState(true)
-  const [binaryPath, setBinaryPath] = useState('opencode')
+  const settings = useSettingsStore((state) => state.settings)
+  const setSettings = useSettingsStore((state) => state.setSettings);
+  const [binaryPath, setBinaryPath] = useState(settings?.opencode_binary ? settings.opencode_binary : "opencode");
 
   useEffect(() => {
     void window.settingsApi.getSettings().then((settings) => {
-      setIsEnabled(settings.opencode_integration_enabled)
       setBinaryPath(settings.opencode_binary)
     })
   }, [])
 
   const handleEnabledChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.checked
-    setIsEnabled(nextValue)
-    void window.settingsApi.updateSetting('opencode_integration_enabled', nextValue ? 'true' : 'false')
+    window.settingsApi.updateSetting('opencode_integration_enabled', nextValue ? 'true' : 'false').then(setSettings).catch(console.error);
   }
 
   const handleBinaryChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -32,7 +32,7 @@ function IntegrationsPage() {
     const trimmedBinary = binaryPath.trim()
     const nextBinary = trimmedBinary.length > 0 ? trimmedBinary : 'opencode'
     setBinaryPath(nextBinary)
-    void window.settingsApi.updateSetting('opencode_binary', nextBinary)
+    window.settingsApi.updateSetting('opencode_binary', nextBinary).then(setSettings).catch(console.error);
   }
 
   return (
@@ -58,7 +58,7 @@ function IntegrationsPage() {
           </div>
 
           <label className="flex items-center gap-2 text-sm font-medium">
-            <input checked={isEnabled} className="h-4 w-4" onChange={handleEnabledChange} type="checkbox" />
+            <input checked={settings?.opencode_integration_enabled ?? false}className="h-4 w-4" onChange={handleEnabledChange} type="checkbox" />
             Enable
           </label>
         </div>
@@ -68,7 +68,7 @@ function IntegrationsPage() {
             Opencode binary
           </label>
           <Input
-            disabled={!isEnabled}
+            disabled={!settings?.opencode_integration_enabled}
             id="opencode-binary"
             onBlur={handleBinaryBlur}
             onChange={handleBinaryChange}

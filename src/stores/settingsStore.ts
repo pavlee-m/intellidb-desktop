@@ -1,9 +1,9 @@
+import SettingsState from '@/interfaces/SettingsState'
 import { create } from 'zustand'
-import type Settings from '@/interfaces/Settings'
 
-
-const useSettingsStore = create((set) => ({
+const useSettingsStore = create<SettingsState>((set) => ({
   settings: null,
+  setSettings: (settings) => set({ settings: settings }),
 }))
 
 export default useSettingsStore

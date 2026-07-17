@@ -1,36 +1,26 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { Moon, Sun } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import useSettingsStore from '@/stores/settingsStore'
 import { Button } from '@/components/ui/button'
 
 export const Route = createFileRoute('/settings/general')({
   component: RouteComponent,
 })
 
-function getInitialTheme(): 'light' | 'dark' {
-  if (typeof window === 'undefined') {
-    return 'light'
-  }
-  return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-}
-
 function RouteComponent() {
-  const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme)
+  const settings = useSettingsStore((state) => state.settings)
+  const setSettings = useSettingsStore((state) => state.setSettings);
 
   useEffect(() => {
-    void window.settingsApi.getSettings().then((settings) => {
-      setTheme(settings.theme)
-      document.documentElement.classList.toggle('dark', settings.theme === 'dark')
-    })
+    document.documentElement.classList.toggle('dark', settings?.theme === 'dark')
   }, [])
 
   const toggleTheme = () => {
-    setTheme((currentTheme) => {
-      const nextTheme = currentTheme === 'light' ? 'dark' : 'light'
-      document.documentElement.classList.toggle('dark', nextTheme === 'dark')
-      void window.settingsApi.updateSetting('theme', nextTheme)
-      return nextTheme
-    })
+    const currentTheme = settings?.theme ?? 'light'
+    const nextTheme = currentTheme === 'light' ? 'dark' : 'light'
+    document.documentElement.classList.toggle('dark', nextTheme === 'dark')
+    window.settingsApi.updateSetting('theme', nextTheme).then(setSettings).catch(console.error)
   }
 
   return (
@@ -39,10 +29,10 @@ function RouteComponent() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="font-medium">Theme</h2>
-            <p className="text-sm text-muted-foreground">Current theme: {theme}</p>
+            <p className="text-sm text-muted-foreground">Current theme: {settings?.theme}</p>
           </div>
           <Button onClick={toggleTheme} variant="secondary">
-            {theme === 'light' ? (
+            {settings?.theme === 'light' ? (
               <>
                 <Moon className="mr-2 h-4 w-4" />
                 Switch to Dark

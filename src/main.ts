@@ -10,6 +10,7 @@ import DBManager from './lib/DBManager';
 import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
+import BackendConnection from './interfaces/BackendConnection';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -18,11 +19,18 @@ if (started) {
 
 let dbManager: DBManager;
 let settings: Settings;
-let connections: Connection[] = [];
+let connections: BackendConnection[] = [];
 let backendProcess: ChildProcess;
 
 const BACKEND_URL = 'http://localhost:8000';
 const execFileAsync = promisify(execFile);
+
+function toBackendConnection(connection: Connection): BackendConnection {
+  return {
+    backendConnectionId: String(connection.id),
+    connection,
+  };
+}
 
 async function initDatabase() {
   const dbPath = path.join(os.homedir(), '.intellidb', 'config.db');
@@ -251,7 +259,8 @@ app.on('ready', async () => {
     console.log(data);
     await initDatabase();
     settings = await dbManager.getSettings();
-    connections = await dbManager.getConnections();
+    const cons: Connection[] = await dbManager.getConnections();
+    connections = cons.map(toBackendConnection);
     ipcMain.handle('settings:get', async () => {
       return settings;
     });
@@ -261,20 +270,38 @@ app.on('ready', async () => {
     });
 
     ipcMain.handle('connections:add', async (_event, connection: Omit<Connection, 'id'>) => {
-      const id:number = await dbManager.addConnection(connection);
+      const id = await dbManager.addConnection(connection);
+      const addedConnection = (await dbManager.getConnections()).find(
+        (currentConnection) => currentConnection.id === id,
+      );
+
+      if (addedConnection) {
+        connections = [...connections, toBackendConnection(addedConnection)];
+      }
+
       return id;
     });
 
     ipcMain.handle('connections:delete', async (_event, connectionId: number) => {
       await dbManager.deleteConnection(connectionId);
+      connections = connections.filter(
+        ({ backendConnectionId }) => backendConnectionId !== String(connectionId),
+      );
     });
 
     ipcMain.handle('connections:edit', async (_event, connection: Connection) => {
       await dbManager.editConnection(connection);
+      connections = connections.map((backendConnection) =>
+        backendConnection.backendConnectionId === String(connection.id)
+          ? toBackendConnection(connection)
+          : backendConnection,
+      );
     });
 
     ipcMain.handle('settings:update', async (_event, key: string, value: string) => {
       await dbManager.updateSetting(key, value);
+      // Find a good way to update in memory, instead of reading db every time.
+      // TODO: Make all the settings update the store.
       settings = await dbManager.getSettings();
       return settings;
     });

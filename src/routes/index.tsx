@@ -38,7 +38,6 @@ export const Route = createFileRoute('/')({
 
 function Index() {
   const connections = useBackendConnectionStore((state) => state.backendConnections)
-  const setConnections = useBackendConnectionStore((state) => state.setConnections)
   const addConnection = useBackendConnectionStore((state) => state.addConnection)
   const editConnection = useBackendConnectionStore((state) => state.editConnection)
   const deleteConnection = useBackendConnectionStore((state) => state.deleteConnection)
@@ -50,20 +49,6 @@ function Index() {
   const handleSearchClick = () => {
     console.log('Search clicked')
   }
-
-  useEffect(() => {
-    window.connectionsApi
-      .getConnections()
-      .then((loadedConnections) =>
-        setConnections(
-          loadedConnections.map((connection) => ({
-            backendConnectionId: String(connection.id),
-            connection,
-          })),
-        ),
-      )
-      .catch(console.error)
-  }, [])
 
   const handleDeleteConnection = async () => {
     if (!connectionPendingDelete) {
