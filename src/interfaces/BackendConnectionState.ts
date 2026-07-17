@@ -6,5 +6,6 @@ export default interface BackendConnectionState {
   addConnection: (connection: BackendConnection) => void
   editConnection: (connection: BackendConnection) => void
   setConnectionStatus: (connectionId: number, backendConnectionId: string) => void
+  setConnectionConnecting: (connectionId: number, isConnecting: boolean) => void
   deleteConnection: (connectionId: number) => void
 }

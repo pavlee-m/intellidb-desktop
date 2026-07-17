@@ -21,6 +21,7 @@ import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, Con
 import DeleteConnectionDialog from '@/components/index/DeleteConnectionDialog'
 import ConnectionDialog from '@/components/index/ConnectionDialog'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { toast } from 'sonner'
 
 function getDbmsLogo(dbms: string): { src?: string; alt: string } {
   const normalizedDbms = dbms.trim().toLowerCase()
@@ -41,6 +42,7 @@ function Index() {
   const addConnection = useBackendConnectionStore((state) => state.addConnection)
   const editConnection = useBackendConnectionStore((state) => state.editConnection)
   const setConnectionStatus = useBackendConnectionStore((state) => state.setConnectionStatus)
+  const setConnectionConnecting = useBackendConnectionStore((state) => state.setConnectionConnecting)
   const deleteConnection = useBackendConnectionStore((state) => state.deleteConnection)
   const [isConnectionDialogOpen, setIsConnectionDialogOpen] = useState(false)
   const [connectionPendingDelete, setConnectionPendingDelete] = useState<Connection | null>(null)
@@ -48,11 +50,15 @@ function Index() {
   const [connectionPendingEdit, setConnectionPendingEdit] = useState<Connection | null>(null)
 
   const handleConnect = async (connection: Connection) => {
+    setConnectionConnecting(connection.id, true)
     try {
       const backendConnectionId = await window.connectionsApi.connectConnection(connection.id)
       setConnectionStatus(connection.id, backendConnectionId)
+      toast.success(`Connected to ${connection.name}`)
     } catch (error) {
       console.error(error)
+      setConnectionConnecting(connection.id, false)
+      toast.error(error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -60,8 +66,10 @@ function Index() {
     try {
       await window.connectionsApi.disconnectConnection(connection.id)
       setConnectionStatus(connection.id, '')
+      toast.success(`Disconnected from ${connection.name}`)
     } catch (error) {
       console.error(error)
+      toast.error(error instanceof Error ? error.message : String(error))
     }
   }
 
@@ -140,7 +148,7 @@ function Index() {
           </SidebarHeader>
           <SidebarContent>
             <SidebarMenu>
-              {connections.map(({ backendConnectionId, connection }) => {
+              {connections.map(({ backendConnectionId, connection, isConnecting }) => {
                 const logo = getDbmsLogo(connection.dbms)
                 return (
                   <SidebarMenuItem key={backendConnectionId}>
@@ -159,8 +167,8 @@ function Index() {
                               <Database className="h-4 w-4 shrink-0" aria-hidden="true" />
                             )}
                             <span
-                              aria-label={backendConnectionId ? 'Connected' : 'Disconnected'}
-                              className={`h-2 w-2 shrink-0 rounded-full ${backendConnectionId ? 'bg-green-500' : 'bg-red-500'}`}
+                              aria-label={isConnecting ? 'Connecting' : backendConnectionId ? 'Connected' : 'Disconnected'}
+                              className={`h-2 w-2 shrink-0 rounded-full ${isConnecting ? 'animate-spin border-2 border-muted-foreground border-t-transparent bg-transparent' : backendConnectionId ? 'bg-green-500' : 'bg-red-500'}`}
                             />
                             <span className="truncate">{connection.name}</span>
                             <ChevronDownIcon className="ml-auto group-data-[state=open]:rotate-180" />
@@ -185,6 +193,7 @@ function Index() {
                         <ContextMenuContent>
                           <ContextMenuGroup>
                             <ContextMenuItem
+                              disabled={isConnecting}
                               onSelect={() => {
                                 void (backendConnectionId
                                   ? handleDisconnect(connection)

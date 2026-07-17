@@ -3,6 +3,7 @@ import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 import useSettingsStore from '@/stores/settingsStore'
 import { useEffect } from 'react'
+import { Toaster } from '@/components/ui/sonner'
 
 function RootLayout()  {
   const setSettings = useSettingsStore((state) => state.setSettings);
@@ -18,6 +19,7 @@ function RootLayout()  {
 
   return (<>
     <Outlet />
+    <Toaster />
     {/* <TanStackRouterDevtools /> */}
   </>)
 }
