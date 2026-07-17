@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -190,6 +190,12 @@ const createWindow = async () => {
     },
   });
 
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key.toLowerCase() === 'r' && (input.control || input.meta)) {
+      event.preventDefault();
+    }
+  });
+
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
@@ -248,6 +254,7 @@ app.on('before-quit', async (event) => {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', async () => {
+  Menu.setApplicationMenu(null);
   try {
     if (!await startBackend()) {
       console.error('Failed to start backend');
