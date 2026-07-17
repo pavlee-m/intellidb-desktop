@@ -17,6 +17,8 @@ declare global {
       addConnection: (connection: Omit<Connection, 'id'>) => Promise<number>;
       deleteConnection: (connectionId: number) => Promise<void>;
       editConnection: (connection: Connection) => Promise<void>;
+      connectConnection: (connectionId: number) => Promise<string>;
+      disconnectConnection: (connectionId: number) => Promise<void>;
     };
   }
 }

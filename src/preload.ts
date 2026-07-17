@@ -17,4 +17,8 @@ contextBridge.exposeInMainWorld('connectionsApi', {
     ipcRenderer.invoke('connections:delete', connectionId) as Promise<void>,
   editConnection: (connection: Connection) =>
     ipcRenderer.invoke('connections:edit', connection) as Promise<void>,
+  connectConnection: (connectionId: number) =>
+    ipcRenderer.invoke('connections:connect', connectionId) as Promise<string>,
+  disconnectConnection: (connectionId: number) =>
+    ipcRenderer.invoke('connections:disconnect', connectionId) as Promise<void>,
 })

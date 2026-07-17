@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import type BackendConnection from '@/interfaces/BackendConnection'
 import BackendConnectionState from '@/interfaces/BackendConnectionState'
 
 const useBackendConnectionStore = create<BackendConnectionState>((set) => ({
@@ -21,10 +20,19 @@ const useBackendConnectionStore = create<BackendConnectionState>((set) => ({
       ),
     })),
 
-  deleteConnection: (backendConnectionId) =>
+  setConnectionStatus: (connectionId, backendConnectionId) =>
+    set((state) => ({
+      backendConnections: state.backendConnections.map((existingConnection) =>
+        existingConnection.connection.id === connectionId
+          ? { ...existingConnection, backendConnectionId }
+          : existingConnection,
+      ),
+    })),
+
+  deleteConnection: (connectionId) =>
     set((state) => ({
       backendConnections: state.backendConnections.filter(
-        (connection) => connection.backendConnectionId !== backendConnectionId,
+        (connection) => connection.connection.id !== connectionId,
       ),
     })),
 }))

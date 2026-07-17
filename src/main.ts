@@ -27,9 +27,19 @@ const execFileAsync = promisify(execFile);
 
 function toBackendConnection(connection: Connection): BackendConnection {
   return {
-    backendConnectionId: String(connection.id),
+    backendConnectionId: '',
     connection,
   };
+}
+
+async function parseBackendResponse(response: Response): Promise<Record<string, unknown>> {
+  const data = await response.json() as Record<string, unknown>;
+
+  if (!response.ok) {
+    throw new Error(typeof data.error === 'string' ? data.error : 'Backend request failed');
+  }
+
+  return data;
 }
 
 async function initDatabase() {
@@ -290,17 +300,94 @@ app.on('ready', async () => {
     });
 
     ipcMain.handle('connections:delete', async (_event, connectionId: number) => {
+      const existingConnection = connections.find(
+        ({ connection }) => connection.id === connectionId,
+      );
+
+      if (existingConnection?.backendConnectionId) {
+        await parseBackendResponse(await fetch(`${BACKEND_URL}/close_db`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ connection_id: existingConnection.backendConnectionId }),
+        }));
+      }
+
       await dbManager.deleteConnection(connectionId);
       connections = connections.filter(
-        ({ backendConnectionId }) => backendConnectionId !== String(connectionId),
+        ({ connection }) => connection.id !== connectionId,
       );
     });
 
     ipcMain.handle('connections:edit', async (_event, connection: Connection) => {
+      const existingConnection = connections.find(
+        ({ connection: currentConnection }) => currentConnection.id === connection.id,
+      );
+
+      if (existingConnection?.backendConnectionId) {
+        await parseBackendResponse(await fetch(`${BACKEND_URL}/close_db`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ connection_id: existingConnection.backendConnectionId }),
+        }));
+      }
+
       await dbManager.editConnection(connection);
       connections = connections.map((backendConnection) =>
-        backendConnection.backendConnectionId === String(connection.id)
+        backendConnection.connection.id === connection.id
           ? toBackendConnection(connection)
+          : backendConnection,
+      );
+    });
+
+    ipcMain.handle('connections:connect', async (_event, connectionId: number) => {
+      const existingConnection = connections.find(
+        ({ connection }) => connection.id === connectionId,
+      );
+      if (!existingConnection) {
+        throw new Error('Connection not found');
+      }
+      const data = await parseBackendResponse(await fetch(`${BACKEND_URL}/connect_db`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dbms: existingConnection.connection.dbms,
+          username: existingConnection.connection.username,
+          password: existingConnection.connection.password,
+          database: existingConnection.connection.database,
+          host: existingConnection.connection.host,
+          conn_query: existingConnection.connection.sqlalchemy_query,
+        }),
+      }));
+      console.log(data);
+      if (typeof data.connection_id !== 'string' || !data.connection_id) {
+        throw new Error('Backend did not return a connection ID');
+      }
+      connections = connections.map((backendConnection) =>
+        backendConnection.connection.id === connectionId
+          ? { ...backendConnection, backendConnectionId: data.connection_id as string }
+          : backendConnection,
+      );
+      return data.connection_id as string;
+    });
+
+    ipcMain.handle('connections:disconnect', async (_event, connectionId: number) => {
+      const existingConnection = connections.find(
+        ({ connection }) => connection.id === connectionId,
+      );
+
+      if (!existingConnection?.backendConnectionId) {
+        return;
+      }
+
+      await parseBackendResponse(await fetch(`${BACKEND_URL}/close_db`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ connection_id: existingConnection.backendConnectionId }),
+      }));
+
+      connections = connections.map((backendConnection) =>
+        backendConnection.connection.id === connectionId
+          ? { ...backendConnection, backendConnectionId: '' }
           : backendConnection,
       );
     });

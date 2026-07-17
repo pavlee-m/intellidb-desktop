@@ -13,7 +13,7 @@ import {
   SidebarTrigger,
 } from '../components/ui/sidebar'
 import { Button } from '@/components/ui/button'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type Connection from '@/interfaces/Connection'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import mssqlLogo from '@/assets/microsoft-sql-server.svg'
@@ -40,11 +40,30 @@ function Index() {
   const connections = useBackendConnectionStore((state) => state.backendConnections)
   const addConnection = useBackendConnectionStore((state) => state.addConnection)
   const editConnection = useBackendConnectionStore((state) => state.editConnection)
+  const setConnectionStatus = useBackendConnectionStore((state) => state.setConnectionStatus)
   const deleteConnection = useBackendConnectionStore((state) => state.deleteConnection)
   const [isConnectionDialogOpen, setIsConnectionDialogOpen] = useState(false)
   const [connectionPendingDelete, setConnectionPendingDelete] = useState<Connection | null>(null)
   const [isDeletingConnection, setIsDeletingConnection] = useState(false)
   const [connectionPendingEdit, setConnectionPendingEdit] = useState<Connection | null>(null)
+
+  const handleConnect = async (connection: Connection) => {
+    try {
+      const backendConnectionId = await window.connectionsApi.connectConnection(connection.id)
+      setConnectionStatus(connection.id, backendConnectionId)
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const handleDisconnect = async (connection: Connection) => {
+    try {
+      await window.connectionsApi.disconnectConnection(connection.id)
+      setConnectionStatus(connection.id, '')
+    } catch (error) {
+      console.error(error)
+    }
+  }
 
   const handleSearchClick = () => {
     console.log('Search clicked')
@@ -58,7 +77,7 @@ function Index() {
     setIsDeletingConnection(true)
     try {
       await window.connectionsApi.deleteConnection(connectionPendingDelete.id)
-      deleteConnection(String(connectionPendingDelete.id))
+      deleteConnection(connectionPendingDelete.id)
       setConnectionPendingDelete(null)
     } catch (error) {
       console.error(error)
@@ -72,7 +91,7 @@ function Index() {
       const newId = await window.connectionsApi.addConnection(connection)
 
       addConnection({
-        backendConnectionId: String(newId),
+        backendConnectionId: '',
         connection: { ...connection, id: newId },
       })
       return
@@ -84,7 +103,7 @@ function Index() {
     }
     await window.connectionsApi.editConnection(updatedConnection)
     editConnection({
-      backendConnectionId: String(updatedConnection.id),
+      backendConnectionId: '',
       connection: updatedConnection,
     })
   }
@@ -139,6 +158,10 @@ function Index() {
                             ) : (
                               <Database className="h-4 w-4 shrink-0" aria-hidden="true" />
                             )}
+                            <span
+                              aria-label={backendConnectionId ? 'Connected' : 'Disconnected'}
+                              className={`h-2 w-2 shrink-0 rounded-full ${backendConnectionId ? 'bg-green-500' : 'bg-red-500'}`}
+                            />
                             <span className="truncate">{connection.name}</span>
                             <ChevronDownIcon className="ml-auto group-data-[state=open]:rotate-180" />
                             </Button>
@@ -161,6 +184,15 @@ function Index() {
                         </ContextMenuTrigger>
                         <ContextMenuContent>
                           <ContextMenuGroup>
+                            <ContextMenuItem
+                              onSelect={() => {
+                                void (backendConnectionId
+                                  ? handleDisconnect(connection)
+                                  : handleConnect(connection))
+                              }}
+                            >
+                              {backendConnectionId ? 'Disconnect' : 'Connect'}
+                            </ContextMenuItem>
                             <ContextMenuItem
                               onSelect={(event) => {
                                 event.preventDefault()
