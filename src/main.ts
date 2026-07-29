@@ -110,6 +110,16 @@ async function initDatabase() {
       INSERT INTO Settings (Key, Value) VALUES
       ('opencode_binary', 'opencode');
     `);
+
+    await db.exec(`
+      INSERT INTO Settings (Key, Value) VALUES
+      ('cursor_cli_integration_enabled', 'false');
+    `);
+
+    await db.exec(`
+      INSERT INTO Settings (Key, Value) VALUES
+      ('cursor_cli_binary', 'cursor-agent');
+    `);
   }
 }
 

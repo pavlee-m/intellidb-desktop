@@ -109,6 +109,16 @@ class DBManager {
 
       if (row.key === 'opencode_binary') {
         settingsObject.opencode_binary = row.value;
+        continue;
+      }
+
+      if (row.key === 'cursor_cli_integration_enabled') {
+        settingsObject.cursor_cli_integration_enabled = row.value === 'true';
+        continue;
+      }
+
+      if (row.key === 'cursor_cli_binary') {
+        settingsObject.cursor_cli_binary = row.value;
       }
     }
 
@@ -116,6 +126,8 @@ class DBManager {
       theme: settingsObject.theme ?? 'light',
       opencode_integration_enabled: settingsObject.opencode_integration_enabled ?? true,
       opencode_binary: settingsObject.opencode_binary ?? 'opencode',
+      cursor_cli_integration_enabled: settingsObject.cursor_cli_integration_enabled ?? true,
+      cursor_cli_binary: settingsObject.cursor_cli_binary ?? 'cursor-agent',
     };
   }
 
