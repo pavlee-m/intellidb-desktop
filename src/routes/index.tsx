@@ -21,6 +21,7 @@ import useChatStore from '@/stores/chatStore'
 import mssqlLogo from '@/assets/microsoft-sql-server.svg'
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import DeleteConnectionDialog from '@/components/index/DeleteConnectionDialog'
+import DeleteChatDialog from '@/components/index/DeleteChatDialog'
 import ConnectionDialog from '@/components/index/ConnectionDialog'
 import ChatItem from '@/components/index/ChatItem'
 import RenameChatDialog from '@/components/index/RenameChatDialog'
@@ -59,6 +60,8 @@ function Index() {
   const [openByConnectionId, setOpenByConnectionId] = useState<Record<number, boolean>>({})
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null)
   const [chatPendingRename, setChatPendingRename] = useState<Chat | null>(null)
+  const [chatPendingDelete, setChatPendingDelete] = useState<Chat | null>(null)
+  const [isDeletingChat, setIsDeletingChat] = useState(false)
 
   const handleConnect = async (connection: Connection) => {
     setConnectionConnecting(connection.id, true)
@@ -133,16 +136,24 @@ function Index() {
     }
   }
 
-  const handleDeleteChat = async (connectionId: number, chat: Chat) => {
+  const handleDeleteChatConfirm = async () => {
+    if (!chatPendingDelete) {
+      return
+    }
+
+    setIsDeletingChat(true)
     try {
-      await window.chatsApi.deleteChat(chat.id)
-      removeChat(connectionId, chat.id)
-      if (selectedChat?.id === chat.id) {
+      await window.chatsApi.deleteChat(chatPendingDelete.id)
+      removeChat(chatPendingDelete.connectionId, chatPendingDelete.id)
+      if (selectedChat?.id === chatPendingDelete.id) {
         setSelectedChat(null)
       }
+      setChatPendingDelete(null)
     } catch (error) {
       console.error(error)
       toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setIsDeletingChat(false)
     }
   }
 
@@ -305,16 +316,14 @@ function Index() {
                         </ContextMenuContent>
                       </ContextMenu>
                       <CollapsibleContent className="flex flex-col gap-2 p-2.5 pt-0 text-sm">
-                        <ul className="w-full">
+                        <ul className="flex w-full flex-col gap-1">
                           {(chats ?? []).map((chat) => (
                             <ChatItem
                               key={chat.id}
                               chat={chat}
                               onSelect={setSelectedChat}
                               onRename={setChatPendingRename}
-                              onDelete={(item) => {
-                                void handleDeleteChat(connection.id, item)
-                              }}
+                              onDelete={setChatPendingDelete}
                             />
                           ))}
                         </ul>
@@ -380,6 +389,16 @@ function Index() {
           }
         }}
         onSubmit={handleRenameChat}
+      />
+      <DeleteChatDialog
+        chat={chatPendingDelete}
+        isDeleting={isDeletingChat}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingChat) {
+            setChatPendingDelete(null)
+          }
+        }}
+        onConfirm={handleDeleteChatConfirm}
       />
     </>
   )
