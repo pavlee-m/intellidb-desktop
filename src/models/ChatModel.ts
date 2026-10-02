@@ -3,4 +3,5 @@ export default interface ChatModel {
   connectionId: number;
   name: string;
   createdAt: string;
+  sessionId: string;
 }

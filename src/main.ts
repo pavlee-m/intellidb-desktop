@@ -82,6 +82,7 @@ async function initDatabase() {
         ConnectionID INTEGER NOT NULL,
         Name TEXT NOT NULL,
         CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        SessionID TEXT NOT NULL,
         FOREIGN KEY (ConnectionID) REFERENCES Connection(ID) ON DELETE CASCADE
       );
     `);
