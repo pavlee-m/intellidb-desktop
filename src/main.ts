@@ -403,6 +403,22 @@ app.on('ready', async () => {
       );
     });
 
+    ipcMain.handle('chats:get', async (_event, connectionId: number) => {
+      return dbManager.getChatsByConnection(connectionId);
+    });
+
+    ipcMain.handle('chats:add', async (_event, connectionId: number) => {
+      return dbManager.addChat(connectionId, 'New chat');
+    });
+
+    ipcMain.handle('chats:rename', async (_event, chatId: number, name: string) => {
+      await dbManager.renameChat(chatId, name);
+    });
+
+    ipcMain.handle('chats:delete', async (_event, chatId: number) => {
+      await dbManager.deleteChat(chatId);
+    });
+
     ipcMain.handle('settings:update', async (_event, key: string, value: string) => {
       await dbManager.updateSetting(key, value);
       // Find a good way to update in memory, instead of reading db every time.

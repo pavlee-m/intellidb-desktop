@@ -1,6 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import Settings from '@/interfaces/Settings';
 import SettingsModel from '../models/SettingsModel';
 import { Database } from 'sqlite';
+import Chat from '@/interfaces/Chat';
+import ChatModel from '../models/ChatModel';
 import Connection from '@/interfaces/Connection';
 
 type ConnectionRow = Omit<Connection, 'sqlalchemy_query'> & {
@@ -82,6 +85,69 @@ class DBManager {
         DELETE FROM Connection WHERE ID = ?;
       `,
       [connectionId],
+    );
+  }
+
+  async getChatsByConnection(connectionId: number): Promise<Chat[]> {
+    return this.db.all<ChatModel[]>(
+      `
+        SELECT
+          ID AS id,
+          ConnectionID AS connectionId,
+          Name AS name,
+          CreatedAt AS createdAt,
+          SessionID AS sessionId
+        FROM Chat
+        WHERE ConnectionID = ?
+        ORDER BY ID;
+      `,
+      [connectionId],
+    );
+  }
+
+  async addChat(connectionId: number, name: string): Promise<Chat> {
+    const result = await this.db.run(
+      `
+        INSERT INTO Chat (ConnectionID, Name, SessionID)
+        VALUES (?, ?, ?);
+      `,
+      [connectionId, name, randomUUID()],
+    );
+
+    const chat = await this.db.get<ChatModel>(
+      `
+        SELECT
+          ID AS id,
+          ConnectionID AS connectionId,
+          Name AS name,
+          CreatedAt AS createdAt,
+          SessionID AS sessionId
+        FROM Chat
+        WHERE ID = ?;
+      `,
+      [result.lastID],
+    );
+
+    return chat!;
+  }
+
+  async renameChat(chatId: number, name: string): Promise<void> {
+    await this.db.run(
+      `
+        UPDATE Chat
+        SET Name = ?
+        WHERE ID = ?;
+      `,
+      [name, chatId],
+    );
+  }
+
+  async deleteChat(chatId: number): Promise<void> {
+    await this.db.run(
+      `
+        DELETE FROM Chat WHERE ID = ?;
+      `,
+      [chatId],
     );
   }
 

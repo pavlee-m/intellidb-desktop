@@ -5,6 +5,7 @@ declare module '*.svg';
 
 type Settings = import('./src/interfaces/Settings').default;
 type Connection = import('./src/interfaces/Connection').default;
+type Chat = import('./src/interfaces/Chat').default;
 
 declare global {
   interface Window {
@@ -19,6 +20,12 @@ declare global {
       editConnection: (connection: Connection) => Promise<void>;
       connectConnection: (connectionId: number) => Promise<string>;
       disconnectConnection: (connectionId: number) => Promise<void>;
+    };
+    chatsApi: {
+      getChats: (connectionId: number) => Promise<Chat[]>;
+      addChat: (connectionId: number) => Promise<Chat>;
+      renameChat: (chatId: number, name: string) => Promise<void>;
+      deleteChat: (chatId: number) => Promise<void>;
     };
   }
 }
