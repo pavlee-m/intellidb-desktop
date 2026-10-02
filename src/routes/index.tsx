@@ -14,12 +14,16 @@ import {
 } from '../components/ui/sidebar'
 import { Button } from '@/components/ui/button'
 import { useState } from 'react'
+import type Chat from '@/interfaces/Chat'
 import type Connection from '@/interfaces/Connection'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
+import useChatStore from '@/stores/chatStore'
 import mssqlLogo from '@/assets/microsoft-sql-server.svg'
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import DeleteConnectionDialog from '@/components/index/DeleteConnectionDialog'
 import ConnectionDialog from '@/components/index/ConnectionDialog'
+import ChatItem from '@/components/index/ChatItem'
+import RenameChatDialog from '@/components/index/RenameChatDialog'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { toast } from 'sonner'
 
@@ -44,10 +48,17 @@ function Index() {
   const setConnectionStatus = useBackendConnectionStore((state) => state.setConnectionStatus)
   const setConnectionConnecting = useBackendConnectionStore((state) => state.setConnectionConnecting)
   const deleteConnection = useBackendConnectionStore((state) => state.deleteConnection)
+  const chatsByConnection = useChatStore((state) => state.chatsByConnection)
+  const setChats = useChatStore((state) => state.setChats)
+  const renameChat = useChatStore((state) => state.renameChat)
+  const removeChat = useChatStore((state) => state.removeChat)
   const [isConnectionDialogOpen, setIsConnectionDialogOpen] = useState(false)
   const [connectionPendingDelete, setConnectionPendingDelete] = useState<Connection | null>(null)
   const [isDeletingConnection, setIsDeletingConnection] = useState(false)
   const [connectionPendingEdit, setConnectionPendingEdit] = useState<Connection | null>(null)
+  const [openByConnectionId, setOpenByConnectionId] = useState<Record<number, boolean>>({})
+  const [selectedChat, setSelectedChat] = useState<Chat | null>(null)
+  const [chatPendingRename, setChatPendingRename] = useState<Chat | null>(null)
 
   const handleConnect = async (connection: Connection) => {
     setConnectionConnecting(connection.id, true)
@@ -73,8 +84,66 @@ function Index() {
     }
   }
 
-  const createChat = async () => {
-    console.log("created thread")
+  const handleConnectionOpenChange = async (connectionId: number, open: boolean) => {
+    setOpenByConnectionId((current) => ({ ...current, [connectionId]: open }))
+    if (!open || connectionId in chatsByConnection) {
+      return
+    }
+
+    try {
+      const chats = await window.chatsApi.getChats(connectionId)
+      // Create may have loaded this connection while the first fetch was in flight.
+      if (connectionId in useChatStore.getState().chatsByConnection) {
+        return
+      }
+      setChats(connectionId, chats)
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const handleCreateChat = async (connectionId: number) => {
+    try {
+      await window.chatsApi.addChat(connectionId)
+      const chats = await window.chatsApi.getChats(connectionId)
+      setChats(connectionId, chats)
+      setOpenByConnectionId((current) => ({ ...current, [connectionId]: true }))
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const handleRenameChat = async (name: string) => {
+    if (!chatPendingRename) {
+      return
+    }
+
+    try {
+      await window.chatsApi.renameChat(chatPendingRename.id, name)
+      renameChat(chatPendingRename.connectionId, chatPendingRename.id, name)
+      if (selectedChat?.id === chatPendingRename.id) {
+        setSelectedChat({ ...selectedChat, name })
+      }
+      setChatPendingRename(null)
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  const handleDeleteChat = async (connectionId: number, chat: Chat) => {
+    try {
+      await window.chatsApi.deleteChat(chat.id)
+      removeChat(connectionId, chat.id)
+      if (selectedChat?.id === chat.id) {
+        setSelectedChat(null)
+      }
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
   }
 
   const handleSearchClick = () => {
@@ -154,60 +223,52 @@ function Index() {
             <SidebarMenu>
               {connections.map(({ backendConnectionId, connection, isConnecting }) => {
                 const logo = getDbmsLogo(connection.dbms)
+                const chats = chatsByConnection[connection.id]
                 return (
                   <SidebarMenuItem key={backendConnectionId}>
-                    <ContextMenu>
-                      <ContextMenuTrigger className="flex w-full justify-center rounded-xl text-sm">
-                         <Collapsible className="w-full rounded-md data-[state=open]:bg-muted">
-                           <div className="flex w-full items-center">
-                             <CollapsibleTrigger asChild>
-                               <Button variant="ghost" className="group/connection min-w-0 flex-1 justify-start">
-                               <ChevronDownIcon className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
-                                 {logo.src ? (
-                                   <img
-                                     src={logo.src}
-                                     alt={logo.alt}
-                                     className="h-4 w-4 shrink-0"
-                                   />
-                                 ) : (
-                                   <Database className="h-4 w-4 shrink-0" aria-hidden="true" />
-                                 )}
-                                 <span
-                                   aria-label={isConnecting ? 'Connecting' : backendConnectionId ? 'Connected' : 'Disconnected'}
-                                   className={`h-2 w-2 shrink-0 rounded-full ${isConnecting ? 'animate-spin border-2 border-muted-foreground border-t-transparent bg-transparent' : backendConnectionId ? 'bg-green-500' : 'bg-red-500'}`}
-                                 />
-                                 <span className="truncate">{connection.name}</span>
-                                 <Button
-                                   className="ml-auto invisible scale-95 opacity-0 transition-all duration-200 group-hover/connection:visible group-hover/connection:scale-100 group-hover/connection:opacity-100"
-                                  type="button"
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    aria-label={`Add item to ${connection.name}`}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      createChat();
-                                    }}
-                                  >
-                                    <CirclePlus className="h-4 w-4 text-muted-foreground" />
-                                  </Button>
-                               </Button>
-                             </CollapsibleTrigger>
-                           </div>
-                           <CollapsibleContent className="flex flex-col items-start gap-2 p-2.5 pt-0 text-sm">
-                            <ul>
-                              <li>
-                                <a>
-                                  {connection.name}
-                                  </a>
-                                </li>
-                              <li>  
-                                <a>
-                                  {connection.name}
-                                </a>
-                              </li>
-                            </ul>
-                          </CollapsibleContent>
-                        </Collapsible>
+                    <Collapsible
+                      className="group w-full"
+                      open={openByConnectionId[connection.id] ?? false}
+                      onOpenChange={(open) => {
+                        void handleConnectionOpenChange(connection.id, open)
+                      }}
+                    >
+                      <ContextMenu>
+                        <ContextMenuTrigger className="flex w-full justify-center rounded-xl text-sm">
+                          <div className="group/connection flex w-full items-center rounded-md group-data-[state=open]:bg-muted">
+                            <CollapsibleTrigger asChild>
+                              <Button variant="ghost" className="min-w-0 flex-1 justify-start">
+                                <ChevronDownIcon className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
+                                {logo.src ? (
+                                  <img
+                                    src={logo.src}
+                                    alt={logo.alt}
+                                    className="h-4 w-4 shrink-0"
+                                  />
+                                ) : (
+                                  <Database className="h-4 w-4 shrink-0" aria-hidden="true" />
+                                )}
+                                <span
+                                  aria-label={isConnecting ? 'Connecting' : backendConnectionId ? 'Connected' : 'Disconnected'}
+                                  className={`h-2 w-2 shrink-0 rounded-full ${isConnecting ? 'animate-spin border-2 border-muted-foreground border-t-transparent bg-transparent' : backendConnectionId ? 'bg-green-500' : 'bg-red-500'}`}
+                                />
+                                <span className="truncate">{connection.name}</span>
+                              </Button>
+                            </CollapsibleTrigger>
+                            <Button
+                              className="ml-auto invisible scale-95 opacity-0 transition-all duration-200 group-hover/connection:visible group-hover/connection:scale-100 group-hover/connection:opacity-100"
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Add item to ${connection.name}`}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                void handleCreateChat(connection.id)
+                              }}
+                            >
+                              <CirclePlus className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                          </div>
                         </ContextMenuTrigger>
                         <ContextMenuContent>
                           <ContextMenuGroup>
@@ -220,6 +281,13 @@ function Index() {
                               }}
                             >
                               {backendConnectionId ? 'Disconnect' : 'Connect'}
+                            </ContextMenuItem>
+                            <ContextMenuItem
+                              onSelect={() => {
+                                void handleCreateChat(connection.id)
+                              }}
+                            >
+                              New chat
                             </ContextMenuItem>
                             <ContextMenuItem
                               onSelect={(event) => {
@@ -235,7 +303,23 @@ function Index() {
                             }}>Edit</ContextMenuItem>
                           </ContextMenuGroup>
                         </ContextMenuContent>
-                    </ContextMenu>
+                      </ContextMenu>
+                      <CollapsibleContent className="flex flex-col gap-2 p-2.5 pt-0 text-sm">
+                        <ul className="w-full">
+                          {(chats ?? []).map((chat) => (
+                            <ChatItem
+                              key={chat.id}
+                              chat={chat}
+                              onSelect={setSelectedChat}
+                              onRename={setChatPendingRename}
+                              onDelete={(item) => {
+                                void handleDeleteChat(connection.id, item)
+                              }}
+                            />
+                          ))}
+                        </ul>
+                      </CollapsibleContent>
+                    </Collapsible>
                   </SidebarMenuItem>
                 )
               })}
@@ -263,7 +347,11 @@ function Index() {
             </div>
           </header>
           <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6">
-            <p className="text-base text-muted-foreground">Select an existing thread or create a new one.</p>
+            <p className="text-base text-muted-foreground">
+              {selectedChat
+                ? selectedChat.name
+                : 'Select an existing thread or create a new one.'}
+            </p>
           </main>
         </SidebarInset>
       </SidebarProvider>
@@ -283,6 +371,15 @@ function Index() {
         onOpenChange={setIsConnectionDialogOpen}
         onSubmit={handleConnectionSubmit}
         setConnectionPendingEdit={setConnectionPendingEdit}
+      />
+      <RenameChatDialog
+        chat={chatPendingRename}
+        onOpenChange={(open) => {
+          if (!open) {
+            setChatPendingRename(null)
+          }
+        }}
+        onSubmit={handleRenameChat}
       />
     </>
   )
