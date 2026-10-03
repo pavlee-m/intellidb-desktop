@@ -402,6 +402,12 @@ app.on('ready', async () => {
     });
 
     ipcMain.handle('chats:add', async (_event, connectionId: number) => {
+      const existingConnection = connections.find(
+        ({ connection }) => connection.id === connectionId,
+      );
+      if (!existingConnection || !existingConnection.backendConnectionId) {
+        throw new Error('Connect the database before creating chats');
+      }
       return dbManager.addChat(connectionId, 'New chat');
     });
 
@@ -421,7 +427,19 @@ app.on('ready', async () => {
       return ensureAgent(chatId, sessionId, (entry) => event.sender.send('agent:activity', { chatId, entry }));
     });
 
-    ipcMain.handle('agent:prompt', (_event, chatId: number, text: string) => promptAgent(chatId, text));
+    ipcMain.handle('agent:prompt', async (_event, chatId: number, text: string) => {
+      const chat = await dbManager.getChat(chatId);
+      if (!chat) {
+        throw new Error('Chat not found');
+      }
+      const existingConnection = connections.find(
+        ({ connection }) => connection.id === chat.connectionId,
+      );
+      if (!existingConnection || !existingConnection.backendConnectionId) {
+        throw new Error('Connect the database before sending messages');
+      }
+      return promptAgent(chatId, text);
+    });
 
     ipcMain.handle('settings:update', async (_event, key: string, value: string) => {
       await dbManager.updateSetting(key, value);

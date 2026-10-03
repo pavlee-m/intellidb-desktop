@@ -298,6 +298,7 @@ function Index() {
                               variant="ghost"
                               size="icon-sm"
                               aria-label={`Add item to ${connection.name}`}
+                              disabled={!backendConnectionId}
                               onClick={(event) => {
                                 event.stopPropagation()
                                 void handleCreateChat(connection.id)
@@ -320,6 +321,7 @@ function Index() {
                               {backendConnectionId ? 'Disconnect' : 'Connect'}
                             </ContextMenuItem>
                             <ContextMenuItem
+                              disabled={!backendConnectionId}
                               onSelect={() => {
                                 void handleCreateChat(connection.id)
                               }}

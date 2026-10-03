@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import Chat from '@/interfaces/Chat'
 import useChatStore from '@/stores/chatStore'
 import useIndexStore from '@/stores/indexStore'
+import useBackendConnectionStore from '@/stores/backendConnectionStore'
 
 interface ChatViewProps {
   chatId: number
@@ -83,6 +84,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const setSessionId = useChatStore((state) => state.setSessionId)
   const setConnectionOpen = useIndexStore((state) => state.setConnectionOpen)
   const openChat = useIndexStore((state) => state.openChat)
+  const backendConnections = useBackendConnectionStore((state) => state.backendConnections)
+  const isConnectionOnline = Boolean(
+    backendConnections.find(
+      ({ connection }) => connection.id === currentChat?.connectionId,
+    )?.backendConnectionId,
+  )
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
@@ -96,6 +103,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }, [currentChat?.id])
 
   const handleSend = async () => {
+    if (!isConnectionOnline) return
     const text = input.trim()
     if (!text || isSending) return
 
@@ -196,7 +204,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
           </div>
           <Button
             type="button"
-            disabled={!input.trim() || isSending}
+            disabled={!input.trim() || isSending || !isConnectionOnline}
             onClick={() => {
               void handleSend()
             }}

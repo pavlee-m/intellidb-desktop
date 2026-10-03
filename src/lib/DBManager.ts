@@ -104,6 +104,22 @@ class DBManager {
     );
   }
 
+  async getChat(chatId: number): Promise<Chat | undefined> {
+    return this.db.get<ChatModel>(
+      `
+        SELECT
+          ID AS id,
+          ConnectionID AS connectionId,
+          Name AS name,
+          CreatedAt AS createdAt,
+          SessionID AS sessionId
+        FROM Chat
+        WHERE ID = ?;
+      `,
+      [chatId],
+    );
+  }
+
   async addChat(connectionId: number, name: string): Promise<Chat> {
     const result = await this.db.run(
       `
