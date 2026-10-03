@@ -4,8 +4,9 @@
 
 - Create / rename / delete a chat thread on a connection — **Implemented** (2026-10-02, see `evidence/chats-2026-10-02.md`).
 - Lazy-load a connection's chats on expand (and on create) — **Implemented**.
-- Select a chat — **Implemented** (main pane shows the chat name; no chat view yet).
-- Send a message, get an agent response via ACP (`src/acp/ACPClient.ts`, untracked work-in-progress) — **Scaffolding only**.
+- Select a chat — **Implemented** (opens the chat view: activity log, input box, footer controls).
+- Send a message, get an agent response via ACP — **Implemented** (2026-10-03, see `evidence/stale-session-fallback-2026-10-03.md`). The agent session lives in the main process (`src/agentHost.ts`), bridged over `agent:connect` / `agent:prompt` / `agent:activity` IPC; the renderer has no Node access.
+- Selection and expansion survive route navigation — **Implemented** (2026-10-03, see `evidence/index-store-2026-10-03.md`). `useIndexStore` (`src/stores/indexStore.ts`) holds `openChatId` and `openByConnectionId`, so `/` → `/settings/general` → `/` remounts `Index` with the same chat open and the same connections expanded. A full page reload still resets it (in-memory store, by design).
 
 ## How to get to it (user POV)
 
@@ -35,7 +36,7 @@ refetches from SQLite on first expand.
 4. Context menu: right-click the row (`mousePressed`/`mouseReleased` with
    `button: 'right'` — `drive.mjs click` is left-only) → menu items `Connect`
    or `Disconnect`, `New chat`, `Delete`, `Edit`.
-5. Select: click the chat button → `main p` text equals the chat name.
+5. Select: click the chat button → the chat view mounts (textarea, "Dangerous queries" switch, stub dropdown, Send).
 6. Rename: right-click the chat → `Rename` → dialog input prefilled → submit →
    list, main pane, and `SELECT Name FROM Chat` all show the new name.
 7. Delete: right-click the chat → `Delete` → a confirm modal opens (title
@@ -52,6 +53,5 @@ Proof needs the UI action (screenshot), the visible DOM state, and the
 - Radix context menus need real right-button events and real clicks; `el.click()` opens nothing.
 - `:has-text()` is not a valid querySelector; tag targets with a data attribute via `eval`, then click that.
 - Creating always refetches the list, so rows inserted outside the UI show up on the next create.
-- `SessionID` is `NOT NULL`; chat creation generates a UUID in the main process.
+- `SessionID` is `NOT NULL`; chat creation inserts `''` and the agent host persists the real ACP session id after connect (with a fresh-session fallback when a stored id is stale — see `evidence/stale-session-fallback-2026-10-03.md`).
 - Deleting a connection does not cascade to its chats (SQLite foreign keys are off in `src/main.ts`); orphan rows stay in `Chat`.
-- Messaging via ACP is still unimplemented — a "send message" request is out of scope for this map entry.
