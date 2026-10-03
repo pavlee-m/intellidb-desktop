@@ -53,5 +53,5 @@ Proof needs the UI action (screenshot), the visible DOM state, and the
 - Radix context menus need real right-button events and real clicks; `el.click()` opens nothing.
 - `:has-text()` is not a valid querySelector; tag targets with a data attribute via `eval`, then click that.
 - Creating always refetches the list, so rows inserted outside the UI show up on the next create.
-- `SessionID` is `NOT NULL`; chat creation inserts `''` and the agent host persists the real ACP session id after connect (with a fresh-session fallback when a stored id is stale — see `evidence/stale-session-fallback-2026-10-03.md`).
+- `SessionID` is `NOT NULL`; chat creation inserts `''` and the agent host persists the real ACP session id after connect (with a fresh-session fallback when a stored id is stale — see `evidence/stale-session-fallback-2026-10-03.md`; an opened-but-never-prompted chat also falls back to a fresh session after a restart, see `evidence/empty-session-fallback-2026-10-04.md`).
 - Deleting a connection does not cascade to its chats (SQLite foreign keys are off in `src/main.ts`); orphan rows stay in `Chat`.
