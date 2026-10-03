@@ -96,6 +96,8 @@ async function startAgent(
     }
     catch (error) {
       console.error('Agent connect failed for chat', chatId, error);
+      // connect() failed after agentProcess spawned; dispose kills it so it can't leak.
+      client.dispose();
       return { client: undefined, ready: false };
     }
     if (persistSessionId) {
@@ -122,7 +124,7 @@ export async function ensureAgent(
     if (!client) {
       // Create a new agent without loading a session
       console.log("Failed to connect to existing agent, creating a new agent");
-      ({ client, ready } = await startAgent(chatId, storedId, onActivity));
+      ({ client, ready } = await startAgent(chatId, undefined, onActivity));
     }
     // A stored id can be stale (agent restarts, old placeholder UUIDs).
     // Fall back to a fresh session instead of leaving the chat unusable.
