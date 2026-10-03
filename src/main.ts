@@ -11,6 +11,7 @@ import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
+import { ensureAgent, promptAgent, setAgentSessionPersister, disposeAgent, disposeAllAgents } from './lib/AgentHost';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -82,20 +83,11 @@ async function initDatabase() {
         ConnectionID INTEGER NOT NULL,
         Name TEXT NOT NULL,
         CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        SessionID TEXT NOT NULL,
+        SessionID TEXT,
         FOREIGN KEY (ConnectionID) REFERENCES Connection(ID) ON DELETE CASCADE
       );
     `);
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS Message (
-        ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        ChatID INTEGER NOT NULL,
-        Role TEXT NOT NULL,
-        Content TEXT NOT NULL,
-        CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (ChatID) REFERENCES Chat(ID) ON DELETE CASCADE
-      );
-    `);
+
     // Insert default settings
     await db.exec(`
       INSERT INTO Settings (Key, Value) VALUES
@@ -227,7 +219,7 @@ const createWindow = async () => {
   }
 
   // Open the DevTools.
-  // mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
 };
 
 function waitForExit(child: ChildProcess): Promise<void> {
@@ -262,6 +254,8 @@ app.on('before-quit', async (event) => {
     if (backendProcess) {
       await killProcessTree(backendProcess);
     }
+
+    disposeAllAgents();
   }
   catch (e) {
     console.log(e);
@@ -417,7 +411,17 @@ app.on('ready', async () => {
 
     ipcMain.handle('chats:delete', async (_event, chatId: number) => {
       await dbManager.deleteChat(chatId);
+      disposeAgent(chatId);
     });
+
+    // Give the agent host a method to persist the session id to the database.
+    setAgentSessionPersister((chatId, sessionId) => dbManager.updateChatSessionId(chatId, sessionId));
+
+    ipcMain.handle('agent:connect', (event, chatId: number, sessionId: string) : Promise<string> => {
+      return ensureAgent(chatId, sessionId, (entry) => event.sender.send('agent:activity', { chatId, entry }));
+    });
+
+    ipcMain.handle('agent:prompt', (_event, chatId: number, text: string) => promptAgent(chatId, text));
 
     ipcMain.handle('settings:update', async (_event, key: string, value: string) => {
       await dbManager.updateSetting(key, value);

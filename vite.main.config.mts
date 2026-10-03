@@ -1,5 +1,6 @@
 import { cpSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 
 function copyBackendPlugin(): Plugin {
@@ -25,6 +26,11 @@ function copyBackendPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [copyBackendPlugin()],
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+    },
+  },
   build: {
     rollupOptions: {
       external: ['sqlite3'],

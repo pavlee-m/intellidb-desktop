@@ -3,5 +3,5 @@ export default interface Chat {
   connectionId: number;
   name: string;
   createdAt: string;
-  sessionId: string;
+  sessionId: string | null;
 }

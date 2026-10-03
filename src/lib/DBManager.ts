@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import Settings from '@/interfaces/Settings';
 import SettingsModel from '../models/SettingsModel';
 import { Database } from 'sqlite';
@@ -109,9 +108,9 @@ class DBManager {
     const result = await this.db.run(
       `
         INSERT INTO Chat (ConnectionID, Name, SessionID)
-        VALUES (?, ?, ?);
+        VALUES (?, ?, '');
       `,
-      [connectionId, name, randomUUID()],
+      [connectionId, name],
     );
 
     const chat = await this.db.get<ChatModel>(
@@ -129,6 +128,17 @@ class DBManager {
     );
 
     return chat!;
+  }
+
+  async updateChatSessionId(chatId: number, sessionId: string): Promise<void> {
+    await this.db.run(
+      `
+        UPDATE Chat
+        SET SessionID = ?
+        WHERE ID = ?;
+      `,
+      [sessionId, chatId],
+    );
   }
 
   async renameChat(chatId: number, name: string): Promise<void> {

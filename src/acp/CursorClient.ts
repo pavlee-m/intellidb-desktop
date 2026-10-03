@@ -14,6 +14,10 @@ export class CursorClient {
     private sessionId!: string;
     private configOptions?: acp.SessionConfigOption[];
 
+    getSessionId(): string {
+        return this.sessionId;
+    }
+
     constructor(
         private handlers: ACPClientHandlers,
         private existingSessionId?: string,

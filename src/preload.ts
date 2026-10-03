@@ -3,6 +3,7 @@ import Settings from '@/interfaces/Settings'
 import Chat from '@/interfaces/Chat'
 import Connection from '@/interfaces/Connection'
 import BackendConnection from './interfaces/BackendConnection'
+import type ChatActivity from '@/interfaces/ChatActivity'
 
 contextBridge.exposeInMainWorld('settingsApi', {
   getSettings: () => ipcRenderer.invoke('settings:get') as Promise<Settings>,
@@ -33,4 +34,19 @@ contextBridge.exposeInMainWorld('chatsApi', {
     ipcRenderer.invoke('chats:rename', chatId, name) as Promise<void>,
   deleteChat: (chatId: number) =>
     ipcRenderer.invoke('chats:delete', chatId) as Promise<void>,
+})
+
+contextBridge.exposeInMainWorld('agentApi', {
+  connect: (chatId: number, sessionId: string) =>
+    ipcRenderer.invoke('agent:connect', chatId, sessionId) as Promise<string>,
+  prompt: (chatId: number, text: string) =>
+    ipcRenderer.invoke('agent:prompt', chatId, text) as Promise<unknown>,
+  onActivity: (callback: (chatId: number, entry: ChatActivity) => void) => {
+    const listener = (_event: unknown, payload: { chatId: number; entry: ChatActivity }) =>
+      callback(payload.chatId, payload.entry)
+    ipcRenderer.on('agent:activity', listener)
+    return () => {
+      ipcRenderer.removeListener('agent:activity', listener)
+    }
+  },
 })

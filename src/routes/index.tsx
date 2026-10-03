@@ -13,11 +13,12 @@ import {
   SidebarTrigger,
 } from '../components/ui/sidebar'
 import { Button } from '@/components/ui/button'
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type Chat from '@/interfaces/Chat'
 import type Connection from '@/interfaces/Connection'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import useChatStore from '@/stores/chatStore'
+import useIndexStore from '@/stores/indexStore'
 import mssqlLogo from '@/assets/microsoft-sql-server.svg'
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import DeleteConnectionDialog from '@/components/index/DeleteConnectionDialog'
@@ -27,6 +28,8 @@ import ChatItem from '@/components/index/ChatItem'
 import RenameChatDialog from '@/components/index/RenameChatDialog'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { toast } from 'sonner'
+import useChatActivityStore from '@/stores/chatActivityStore'
+import ChatView from '@/components/index/ChatView'
 
 function getDbmsLogo(dbms: string): { src?: string; alt: string } {
   const normalizedDbms = dbms.trim().toLowerCase()
@@ -51,17 +54,41 @@ function Index() {
   const deleteConnection = useBackendConnectionStore((state) => state.deleteConnection)
   const chatsByConnection = useChatStore((state) => state.chatsByConnection)
   const setChats = useChatStore((state) => state.setChats)
+  const addChat = useChatStore((state) => state.addChat)
   const renameChat = useChatStore((state) => state.renameChat)
   const removeChat = useChatStore((state) => state.removeChat)
+  const setSessionId = useChatStore((state) => state.setSessionId)
+  const openChatId = useIndexStore((state) => state.openChatId)
+  const openChat = useIndexStore((state) => state.openChat)
+  const closeChat = useIndexStore((state) => state.closeChat)
+  const openByConnectionId = useIndexStore((state) => state.openByConnectionId)
+  const setConnectionOpen = useIndexStore((state) => state.setConnectionOpen)
   const [isConnectionDialogOpen, setIsConnectionDialogOpen] = useState(false)
   const [connectionPendingDelete, setConnectionPendingDelete] = useState<Connection | null>(null)
   const [isDeletingConnection, setIsDeletingConnection] = useState(false)
   const [connectionPendingEdit, setConnectionPendingEdit] = useState<Connection | null>(null)
-  const [openByConnectionId, setOpenByConnectionId] = useState<Record<number, boolean>>({})
-  const [selectedChat, setSelectedChat] = useState<Chat | null>(null)
   const [chatPendingRename, setChatPendingRename] = useState<Chat | null>(null)
   const [chatPendingDelete, setChatPendingDelete] = useState<Chat | null>(null)
   const [isDeletingChat, setIsDeletingChat] = useState(false)
+  const [loadingChatIds, setLoadingChatIds] = useState<Set<number>>(new Set())
+  const applyAgentUpdate = useChatActivityStore((state) => state.applyAgentUpdate)
+
+  useEffect(() => window.agentApi.onActivity((chatId, entry) => applyAgentUpdate(chatId, entry)), [])
+
+  // Selected chat is derived from the store, so store updates (rename, delete)
+  // propagate automatically without duplicating the object in local state.
+  const selectedChat = useMemo(() => {
+    if (openChatId === null) {
+      return null
+    }
+    for (const chats of Object.values(chatsByConnection)) {
+      const match = chats.find((chat) => chat.id === openChatId)
+      if (match) {
+        return match
+      }
+    }
+    return null
+  }, [openChatId, chatsByConnection])
 
   const handleConnect = async (connection: Connection) => {
     setConnectionConnecting(connection.id, true)
@@ -88,17 +115,17 @@ function Index() {
   }
 
   const handleConnectionOpenChange = async (connectionId: number, open: boolean) => {
-    setOpenByConnectionId((current) => ({ ...current, [connectionId]: open }))
+    setConnectionOpen(connectionId, open)
     if (!open || connectionId in chatsByConnection) {
       return
     }
 
     try {
-      const chats = await window.chatsApi.getChats(connectionId)
-      // Create may have loaded this connection while the first fetch was in flight.
-      if (connectionId in useChatStore.getState().chatsByConnection) {
+      // If the connection's chats are already loaded, don't fetch them again.
+      if (chatsByConnection[connectionId]) {
         return
       }
+      const chats = await window.chatsApi.getChats(connectionId)
       setChats(connectionId, chats)
     } catch (error) {
       console.error(error)
@@ -108,10 +135,9 @@ function Index() {
 
   const handleCreateChat = async (connectionId: number) => {
     try {
-      await window.chatsApi.addChat(connectionId)
-      const chats = await window.chatsApi.getChats(connectionId)
-      setChats(connectionId, chats)
-      setOpenByConnectionId((current) => ({ ...current, [connectionId]: true }))
+      const chat = await window.chatsApi.addChat(connectionId)
+      addChat(connectionId, chat)
+      setConnectionOpen(connectionId, true)
     } catch (error) {
       console.error(error)
       toast.error(error instanceof Error ? error.message : String(error))
@@ -126,9 +152,6 @@ function Index() {
     try {
       await window.chatsApi.renameChat(chatPendingRename.id, name)
       renameChat(chatPendingRename.connectionId, chatPendingRename.id, name)
-      if (selectedChat?.id === chatPendingRename.id) {
-        setSelectedChat({ ...selectedChat, name })
-      }
       setChatPendingRename(null)
     } catch (error) {
       console.error(error)
@@ -145,8 +168,8 @@ function Index() {
     try {
       await window.chatsApi.deleteChat(chatPendingDelete.id)
       removeChat(chatPendingDelete.connectionId, chatPendingDelete.id)
-      if (selectedChat?.id === chatPendingDelete.id) {
-        setSelectedChat(null)
+      if (chatPendingDelete.id === useIndexStore.getState().openChatId) {
+        closeChat()
       }
       setChatPendingDelete(null)
     } catch (error) {
@@ -200,6 +223,28 @@ function Index() {
     })
   }
 
+  const handleChatSelect = (chat: Chat) => {
+    if (loadingChatIds.has(chat.id)) {
+      return
+    }
+    setLoadingChatIds((current) => new Set(current).add(chat.id))
+    window.agentApi.connect(chat.id, chat.sessionId)
+      .then((sessionId) => {
+        if (sessionId) {
+          setSessionId(chat.connectionId, chat.id, sessionId)
+        }
+      })
+      .catch((error) => {
+        console.error(error)
+        toast.error(error instanceof Error ? error.message : String(error))
+      })
+    openChat(chat.id)
+    setLoadingChatIds((current) => {
+      current.delete(chat.id)
+      return current
+    })
+  }
+
   return (
     <>
       <SidebarProvider>
@@ -238,7 +283,7 @@ function Index() {
                 return (
                   <SidebarMenuItem key={backendConnectionId}>
                     <Collapsible
-                      className="group w-full"
+                      className="group w-full rounded-md data-[state=open]:bg-muted"
                       open={openByConnectionId[connection.id] ?? false}
                       onOpenChange={(open) => {
                         void handleConnectionOpenChange(connection.id, open)
@@ -246,7 +291,7 @@ function Index() {
                     >
                       <ContextMenu>
                         <ContextMenuTrigger className="flex w-full justify-center rounded-xl text-sm">
-                          <div className="group/connection flex w-full items-center rounded-md group-data-[state=open]:bg-muted">
+                          <div className="group/connection flex w-full items-center">
                             <CollapsibleTrigger asChild>
                               <Button variant="ghost" className="min-w-0 flex-1 justify-start">
                                 <ChevronDownIcon className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
@@ -315,13 +360,13 @@ function Index() {
                           </ContextMenuGroup>
                         </ContextMenuContent>
                       </ContextMenu>
-                      <CollapsibleContent className="flex flex-col gap-2 p-2.5 pt-0 text-sm">
+                      <CollapsibleContent className="flex flex-col items-start gap-2 p-2.5 pt-0 text-sm">
                         <ul className="flex w-full flex-col gap-1">
                           {(chats ?? []).map((chat) => (
                             <ChatItem
                               key={chat.id}
                               chat={chat}
-                              onSelect={setSelectedChat}
+                              onSelect={() => handleChatSelect(chat)}
                               onRename={setChatPendingRename}
                               onDelete={setChatPendingDelete}
                             />
@@ -355,12 +400,14 @@ function Index() {
               <span className="h-9 w-9" aria-hidden="true" />
             </div>
           </header>
-          <main className="flex flex-1 flex-col items-center justify-center gap-6 p-6">
-            <p className="text-base text-muted-foreground">
-              {selectedChat
-                ? selectedChat.name
-                : 'Select an existing thread or create a new one.'}
-            </p>
+          <main className="flex min-h-0 flex-1 flex-col">
+            {selectedChat ? (
+              <ChatView chat={selectedChat} />
+            ) : (
+              <div className="flex flex-1 items-center justify-center p-6">
+                <p className="text-base text-muted-foreground">Select an existing thread or create a new one.</p>
+              </div>
+            )}
           </main>
         </SidebarInset>
       </SidebarProvider>

@@ -92,3 +92,4 @@ typings/
 out/
 
 src/server
+src/backend/sqlmcp.bin
