@@ -134,14 +134,9 @@ function Index() {
   }
 
   const handleCreateChat = async (connectionId: number) => {
-    try {
-      const chat = await window.chatsApi.addChat(connectionId)
-      addChat(connectionId, chat)
-      setConnectionOpen(connectionId, true)
-    } catch (error) {
-      console.error(error)
-      toast.error(error instanceof Error ? error.message : String(error))
-    }
+    // Placeholders.
+    addChat(connectionId, { id: -1, connectionId: connectionId, name: 'New chat', sessionId: '' } as Chat);
+    openChat(-1)
   }
 
   const handleRenameChat = async (name: string) => {
@@ -224,25 +219,11 @@ function Index() {
   }
 
   const handleChatSelect = (chat: Chat) => {
-    if (loadingChatIds.has(chat.id)) {
-      return
+    console.log('handleChatSelect', chat.id)
+    openChat(chat.id);
+    if (chatsByConnection[chat.connectionId]?.find((chat) => chat.id === -1) && chat.id !== -1) {
+      removeChat(chat.connectionId, -1);
     }
-    setLoadingChatIds((current) => new Set(current).add(chat.id))
-    window.agentApi.connect(chat.id, chat.sessionId)
-      .then((sessionId) => {
-        if (sessionId) {
-          setSessionId(chat.connectionId, chat.id, sessionId)
-        }
-      })
-      .catch((error) => {
-        console.error(error)
-        toast.error(error instanceof Error ? error.message : String(error))
-      })
-    openChat(chat.id)
-    setLoadingChatIds((current) => {
-      current.delete(chat.id)
-      return current
-    })
   }
 
   return (
@@ -402,7 +383,7 @@ function Index() {
           </header>
           <main className="flex min-h-0 flex-1 flex-col">
             {selectedChat ? (
-              <ChatView chat={selectedChat} />
+              <ChatView chatId={selectedChat.id} />
             ) : (
               <div className="flex flex-1 items-center justify-center p-6">
                 <p className="text-base text-muted-foreground">Select an existing thread or create a new one.</p>

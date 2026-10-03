@@ -15,9 +15,11 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import Chat from '@/interfaces/Chat'
+import useChatStore from '@/stores/chatStore'
+import useIndexStore from '@/stores/indexStore'
 
 interface ChatViewProps {
-  chat: Chat
+  chatId: number
 }
 
 // Stable fallback: an inline `?? []` returns a fresh reference per snapshot,
@@ -60,23 +62,56 @@ function ActivityEntry({ entry }: { entry: ChatActivity }) {
   }
 }
 
-export default function ChatView({ chat }: ChatViewProps) {
+export default function ChatView({ chatId }: ChatViewProps) {
+  // chatsByConnection is keyed by connectionId, so we can't index by chatId;
+  // scan the values and match on chat.id instead.
+  const currentChat: Chat | undefined = useChatStore((state) =>
+    Object.values(state.chatsByConnection)
+      .flat()
+      .find((chat) => chat.id === chatId),
+  )
   const entries = useChatActivityStore(
-    (state) => state.activityByChatId[chat.id] ?? NO_ENTRIES,
+    (state) => state.activityByChatId[chatId] ?? NO_ENTRIES,
   )
   const pushUserMessage = useChatActivityStore((state) => state.pushUserMessage)
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [stubValue, setStubValue] = useState<string>()
   const bottomRef = useRef<HTMLDivElement>(null)
+  const addChat = useChatStore((state) => state.addChat)
+  const removeChat = useChatStore((state) => state.removeChat)
+  const setSessionId = useChatStore((state) => state.setSessionId)
+  const setConnectionOpen = useIndexStore((state) => state.setConnectionOpen)
+  const openChat = useIndexStore((state) => state.openChat)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [entries])
 
+  useEffect(() => {
+    console.log('Chat id', currentChat?.id)
+    if (currentChat && currentChat.id !== 1) {
+      handleAgentConnect(currentChat);
+    }
+  }, [currentChat?.id])
+
   const handleSend = async () => {
     const text = input.trim()
     if (!text || isSending) return
+
+    let chat = currentChat
+    if (chat && chat.id === -1) {
+      const newChat = await createChat(chat.connectionId)
+      if (!newChat) return
+      // Swap the -1 placeholder for the persisted chat: drop the placeholder,
+      // select the real one, and keep using it for the rest of this send.
+      removeChat(newChat.connectionId, -1)
+      openChat(newChat.id)
+      await handleAgentConnect(newChat)
+      chat = newChat
+    }
+    if (!chat) return
+
     setIsSending(true)
     setInput('')
     pushUserMessage(chat.id, text)
@@ -87,6 +122,32 @@ export default function ChatView({ chat }: ChatViewProps) {
     } finally {
       setIsSending(false)
     }
+  }
+
+  const createChat = async (connectionId: number): Promise<Chat | null> => {
+    try {
+      const chat = await window.chatsApi.addChat(connectionId)
+      addChat(connectionId, chat)
+      setConnectionOpen(connectionId, true)
+      return chat
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : String(error))
+      return null
+    }
+  }
+
+  const handleAgentConnect = (chat: Chat) => {
+    return window.agentApi.connect(chat.id, chat.sessionId)
+      .then((sessionId) => {
+        if (sessionId) {
+          setSessionId(chat.connectionId, chat.id, sessionId)
+        }
+      })
+      .catch((error) => {
+        console.error(error)
+        toast.error(error instanceof Error ? error.message : String(error))
+      })
   }
 
   return (
