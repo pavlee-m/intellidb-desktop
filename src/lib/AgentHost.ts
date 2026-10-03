@@ -1,11 +1,11 @@
 import ChatActivity from '@/interfaces/ChatActivity';
 import ACPClientHandlers from '@/interfaces/ACPClientHandlers';
+import ProviderClient from '@/interfaces/ProviderClient';
 import { CursorClient } from '@/acp/CursorClient';
 
-const agents = new Map<number, { client: CursorClient | undefined; ready: boolean }>();
+const agents = new Map<number, { client: ProviderClient | undefined; ready: boolean }>();
 
 function createHandlers(onActivity: (entry: ChatActivity) => void): ACPClientHandlers {
-  // Last known entry per tool call, so a status-only update keeps the title.
   const toolEntries = new Map<string, ChatActivity>();
 
   return {
@@ -76,8 +76,7 @@ function createHandlers(onActivity: (entry: ChatActivity) => void): ACPClientHan
   };
 }
 
-// Wired by main.ts so a newly created session id lands in the Chat row.
-// Method for persisting the session id to the database.
+// Set by main.ts; persists each new session id to the Chat row.
 let persistSessionId: (chatId: number, sessionId: string) => Promise<void>;
 
 export function setAgentSessionPersister(persister: (chatId: number, sessionId: string) => Promise<void>): void {
@@ -88,7 +87,7 @@ async function startAgent(
     chatId: number,
     sessionId: string | undefined,
     onActivity: (entry: ChatActivity) => void,
-): Promise<{ client: CursorClient | undefined; ready: boolean }> {
+): Promise<{ client: ProviderClient | undefined; ready: boolean }> {
     agents.set(chatId, { client: undefined, ready: false });
     const client = new CursorClient(createHandlers(onActivity), sessionId);
     try{
@@ -96,7 +95,6 @@ async function startAgent(
     }
     catch (error) {
       console.error('Agent connect failed for chat', chatId, error);
-      // connect() failed after agentProcess spawned; dispose kills it so it can't leak.
       client.dispose();
       return { client: undefined, ready: false };
     }
@@ -118,16 +116,14 @@ export async function ensureAgent(
     }
 
     const storedId = sessionId && sessionId.length > 0 ? sessionId : undefined;
-    let client: CursorClient | undefined;
+    let client: ProviderClient | undefined;
     let ready: boolean;
     ({ client, ready } = await startAgent(chatId, storedId, onActivity));
     if (!client) {
-      // Create a new agent without loading a session
       console.log("Failed to connect to existing agent, creating a new agent");
       ({ client, ready } = await startAgent(chatId, undefined, onActivity));
     }
-    // A stored id can be stale (agent restarts, old placeholder UUIDs).
-    // Fall back to a fresh session instead of leaving the chat unusable.
+    // A stored id can be stale; fall back to a fresh session.
     agents.set(chatId, { client, ready });
     return client?.getSessionId() ?? '';
 }
