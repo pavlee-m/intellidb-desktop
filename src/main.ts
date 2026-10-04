@@ -428,15 +428,6 @@ app.on('ready', async () => {
     setAgentSessionPersister((chatId, sessionId) => dbManager.updateChatSessionId(chatId, sessionId));
 
     ipcMain.handle('agent:connect', async (event, chatId: number, sessionId: string) : Promise<string> => {
-      const chat = await dbManager.getChat(chatId);
-      if (chat) {
-        const existingConnection = connections.find(
-          ({ connection }) => connection.id === chat.connectionId,
-        );
-        if (!existingConnection || !existingConnection.backendConnectionId) {
-          throw new Error('Connect the database before using the agent');
-        }
-      }
       return ensureAgent(chatId, sessionId, (entry) => event.sender.send('agent:activity', { chatId, entry }));
     });
 

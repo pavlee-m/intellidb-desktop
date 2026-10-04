@@ -13,6 +13,12 @@ import {
   SidebarTrigger,
 } from '../components/ui/sidebar'
 import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { useEffect, useMemo, useState } from 'react'
 import type Chat from '@/interfaces/Chat'
 import type Connection from '@/interfaces/Connection'
@@ -262,6 +268,22 @@ function Index() {
               {connections.map(({ backendConnectionId, connection, isConnecting }) => {
                 const logo = getDbmsLogo(connection.dbms)
                 const chats = chatsByConnection[connection.id]
+                const addChatButton = (
+                  <Button
+                    className="ml-auto invisible scale-95 opacity-0 transition-all duration-200 group-hover/connection:visible group-hover/connection:scale-100 group-hover/connection:opacity-100"
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Add item to ${connection.name}`}
+                    disabled={!backendConnectionId}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void handleCreateChat(connection.id)
+                    }}
+                  >
+                    <CirclePlus className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                )
                 return (
                   <SidebarMenuItem key={backendConnectionId}>
                     <Collapsible
@@ -300,20 +322,18 @@ function Index() {
                                 <span className="truncate">{connection.name}</span>
                               </Button>
                             </CollapsibleTrigger>
-                            <Button
-                              className="ml-auto invisible scale-95 opacity-0 transition-all duration-200 group-hover/connection:visible group-hover/connection:scale-100 group-hover/connection:opacity-100"
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Add item to ${connection.name}`}
-                              disabled={!backendConnectionId}
-                              onClick={(event) => {
-                                event.stopPropagation()
-                                void handleCreateChat(connection.id)
-                              }}
-                            >
-                              <CirclePlus className="h-4 w-4 text-muted-foreground" />
-                            </Button>
+                            {!backendConnectionId ? (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="ml-auto cursor-not-allowed">{addChatButton}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Connection is not active</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            ) : (
+                              addChatButton
+                            )}
                           </div>
                         </ContextMenuTrigger>
                         <ContextMenuContent>

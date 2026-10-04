@@ -99,7 +99,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     )?.backendConnectionId,
   )
   const mode = isSending ? 'stop' : 'send'
-  const isWaitingForActivity = waitForInitialActivity && isConnectionOnline
+  const isWaitingForActivity = waitForInitialActivity
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
@@ -176,7 +176,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }
 
   const handleAgentConnect = (chat: Chat) => {
-    if (!isConnectionOnline) return
     return window.agentApi.connect(chat.id, chat.sessionId)
       .then((sessionId) => {
         if (sessionId) {
@@ -195,7 +194,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     <Textarea
       rows={2}
       value={input}
-      disabled={!isConnectionOnline}
+      disabled={!isConnectionOnline || isWaitingForActivity}
       className={!isConnectionOnline ? 'pointer-events-none' : undefined}
       onChange={(event) => setInput(event.target.value)}
       onKeyDown={(event) => {
@@ -210,7 +209,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const sendStopButton = (
     <Button
       type="button"
-      disabled={mode === 'send' && (!input.trim() || !isConnectionOnline)}
+      disabled={mode === 'send' && (!input.trim() || !isConnectionOnline || isWaitingForActivity)}
       onClick={() => {
         if (mode === 'stop') {
           void handleCancel()
