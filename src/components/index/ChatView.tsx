@@ -100,7 +100,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     if (currentChat && currentChat.id !== 1) {
       handleAgentConnect(currentChat);
     }
-  }, [currentChat?.id])
+  }, [currentChat?.id, isConnectionOnline])
 
   const handleSend = async () => {
     if (!isConnectionOnline) return
@@ -146,6 +146,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }
 
   const handleAgentConnect = (chat: Chat) => {
+    if (!isConnectionOnline) return
     return window.agentApi.connect(chat.id, chat.sessionId)
       .then((sessionId) => {
         if (sessionId) {
