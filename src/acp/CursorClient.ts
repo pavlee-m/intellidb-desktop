@@ -19,6 +19,7 @@ export class CursorClient implements ProviderClient {
     constructor(
         private handlers: ACPClientHandlers,
         private existingSessionId?: string,
+        private mcpServers: acp.McpServer[] = [],
     ) {
     }
 
@@ -49,13 +50,13 @@ export class CursorClient implements ProviderClient {
             let loaded: acp.LoadSessionResponse = await this.connection.agent.request(acp.methods.agent.session.load, {
                 sessionId: this.existingSessionId,
                 cwd: process.cwd(),
-                mcpServers: [],
+                mcpServers: this.mcpServers,
             });
             this.sessionId = this.existingSessionId;
         } else {
             let created: acp.NewSessionResponse = await this.connection.agent.request(acp.methods.agent.session.new, {
                 cwd: process.cwd(),
-                mcpServers: [],
+                mcpServers: this.mcpServers,
             });
             this.sessionId = created.sessionId;
         }

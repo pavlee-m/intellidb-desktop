@@ -2,8 +2,16 @@ import ChatActivity from '@/interfaces/ChatActivity';
 import ACPClientHandlers from '@/interfaces/ACPClientHandlers';
 import ProviderClient from '@/interfaces/ProviderClient';
 import { CursorClient } from '@/acp/CursorClient';
+import type * as acp from '@agentclientprotocol/sdk';
 
 const agents = new Map<number, { client: ProviderClient | undefined; ready: boolean }>();
+
+// MCP servers handed to every ACP session (set once at startup by main.ts).
+let agentMcpServers: acp.McpServer[] = [];
+
+export function setAgentMcpServers(servers: acp.McpServer[]): void {
+    agentMcpServers = servers;
+}
 
 function createHandlers(onActivity: (entry: ChatActivity) => void): ACPClientHandlers {
   const toolEntries = new Map<string, ChatActivity>();
@@ -89,7 +97,7 @@ async function startAgent(
     onActivity: (entry: ChatActivity) => void,
 ): Promise<{ client: ProviderClient | undefined; ready: boolean }> {
     agents.set(chatId, { client: undefined, ready: false });
-    const client = new CursorClient(createHandlers(onActivity), sessionId);
+    const client = new CursorClient(createHandlers(onActivity), sessionId, agentMcpServers);
     try{
       await client.connect();
     }

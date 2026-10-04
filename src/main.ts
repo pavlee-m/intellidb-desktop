@@ -11,7 +11,7 @@ import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
-import { ensureAgent, promptAgent, setAgentSessionPersister, disposeAgent, disposeAllAgents } from './lib/AgentHost';
+import { ensureAgent, promptAgent, setAgentSessionPersister, setAgentMcpServers, disposeAgent, disposeAllAgents } from './lib/AgentHost';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -24,6 +24,9 @@ let connections: BackendConnection[] = [];
 let backendProcess: ChildProcess;
 
 const BACKEND_URL = 'http://localhost:8000';
+// The agent subprocess must reach the same sqlmcp instance main.ts spawned.
+// FastMCP mounts streamable HTTP at /mcp; 127.0.0.1 avoids localhost resolving to ::1.
+const SQLMCP_MCP_URL = 'http://127.0.0.1:8000/mcp';
 const execFileAsync = promisify(execFile);
 
 function toBackendConnection(connection: Connection): BackendConnection {
@@ -279,6 +282,7 @@ app.on('ready', async () => {
     const response = await fetch(`${BACKEND_URL}/connections`);
     const data = await response.json();
     console.log(data);
+    setAgentMcpServers([{ type: 'http', name: 'sqlmcp', url: SQLMCP_MCP_URL, headers: [] }]);
     await initDatabase();
     settings = await dbManager.getSettings();
     const cons: Connection[] = await dbManager.getConnections();
