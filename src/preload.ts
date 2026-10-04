@@ -49,4 +49,6 @@ contextBridge.exposeInMainWorld('agentApi', {
       ipcRenderer.removeListener('agent:activity', listener)
     }
   },
+  cancel: (chatId: number) =>
+    ipcRenderer.invoke('agent:cancel', chatId) as Promise<void>,
 })

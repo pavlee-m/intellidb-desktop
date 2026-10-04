@@ -4,5 +4,6 @@ export default interface ProviderClient {
     connect(): Promise<acp.InitializeResponse>;
     getSessionId(): string;
     sendMessage(text: string): Promise<acp.PromptResponse>;
+    cancel(): void;
     dispose(): void;
 }

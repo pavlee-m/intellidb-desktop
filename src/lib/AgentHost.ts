@@ -136,6 +136,14 @@ export async function ensureAgent(
     return client?.getSessionId() ?? '';
 }
 
+export async function cancelRequest(chatId: number): Promise<void> {
+  const agent = agents.get(chatId);
+  if (!agent) {
+    throw new Error('Agent is not connected');
+  }
+  await agent.client?.cancel();
+}
+
 export function disposeAllAgents(): void {
   for (const chatId of [...agents.keys()]) {
     disposeAgent(chatId);

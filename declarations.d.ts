@@ -27,6 +27,7 @@ declare global {
     agentApi: {
       connect: (chatId: number, sessionId: string | null) => Promise<string>;
       prompt: (chatId: number, text: string) => Promise<unknown>;
+      cancel: (chatId: number) => Promise<void>;
       onActivity: (callback: (chatId: number, entry: ChatActivity) => void) => () => void;
     };
   }

@@ -23,6 +23,12 @@ export class CursorClient implements ProviderClient {
     ) {
     }
 
+    async cancel(): Promise<void> {
+        await this.connection.agent.notify(acp.methods.agent.session.cancel, {
+            sessionId: this.sessionId,
+        });
+    }
+
     async connect(): Promise<acp.InitializeResponse> {
         this.agentProcess = spawn("agent", ["--model", "composer-2.5", "acp"], {
             stdio: ["pipe", "pipe", "inherit"],

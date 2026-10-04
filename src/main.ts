@@ -11,7 +11,7 @@ import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
-import { ensureAgent, promptAgent, setAgentSessionPersister, setAgentMcpServers, disposeAgent, disposeAllAgents } from './lib/AgentHost';
+import { ensureAgent, promptAgent, setAgentSessionPersister, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest } from './lib/AgentHost';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -438,6 +438,14 @@ app.on('ready', async () => {
         }
       }
       return ensureAgent(chatId, sessionId, (entry) => event.sender.send('agent:activity', { chatId, entry }));
+    });
+
+    ipcMain.handle('agent:cancel', async (_event, chatId: number) => {
+      const chat = await dbManager.getChat(chatId);
+      if (!chat) {
+        throw new Error('Chat not found');
+      }
+      return cancelRequest(chatId);
     });
 
     ipcMain.handle('agent:prompt', async (_event, chatId: number, text: string) => {
