@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Send } from 'lucide-react'
+import { Send, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type ChatActivity from '@/interfaces/ChatActivity'
 import useChatActivityStore from '@/stores/chatActivityStore'
@@ -14,10 +14,17 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import Chat from '@/interfaces/Chat'
 import useChatStore from '@/stores/chatStore'
 import useIndexStore from '@/stores/indexStore'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
+import { Spinner } from '@/components/ui/spinner'
 
 interface ChatViewProps {
   chatId: number
@@ -75,6 +82,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     (state) => state.activityByChatId[chatId] ?? NO_ENTRIES,
   )
   const pushUserMessage = useChatActivityStore((state) => state.pushUserMessage)
+  const [waitForInitialActivity, setWaitForInitialActivity] = useState(chatId === -1 ? false: true)
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
   const [stubValue, setStubValue] = useState<string>()
@@ -90,10 +98,22 @@ export default function ChatView({ chatId }: ChatViewProps) {
       ({ connection }) => connection.id === currentChat?.connectionId,
     )?.backendConnectionId,
   )
+  const mode = isSending ? 'stop' : 'send'
+  const isWaitingForActivity = waitForInitialActivity && isConnectionOnline
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [entries])
+
+  useEffect(() => {
+    return window.agentApi.onActivity((activityChatId) => {
+      if (activityChatId === chatId) setWaitForInitialActivity(false)
+    })
+  }, [chatId])
+
+  useEffect(() => {
+    setWaitForInitialActivity(chatId !== -1)
+  }, [chatId])
 
   useEffect(() => {
     console.log('Chat id', currentChat?.id)
@@ -132,6 +152,16 @@ export default function ChatView({ chatId }: ChatViewProps) {
     }
   }
 
+  const handleCancel = async () => {
+    try {
+      await window.agentApi.cancel(chatId);
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : String(error))
+    }
+    setIsSending(false);
+  }
+
   const createChat = async (connectionId: number): Promise<Chat | null> => {
     try {
       const chat = await window.chatsApi.addChat(connectionId)
@@ -152,40 +182,82 @@ export default function ChatView({ chatId }: ChatViewProps) {
         if (sessionId) {
           setSessionId(chat.connectionId, chat.id, sessionId)
         }
+        setWaitForInitialActivity(false)
       })
       .catch((error) => {
         console.error(error)
         toast.error(error instanceof Error ? error.message : String(error))
+        setWaitForInitialActivity(false)
       })
   }
 
+  const composer = (
+    <Textarea
+      rows={2}
+      value={input}
+      disabled={!isConnectionOnline}
+      className={!isConnectionOnline ? 'pointer-events-none' : undefined}
+      onChange={(event) => setInput(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' && !event.shiftKey) {
+          event.preventDefault()
+          void handleSend()
+        }
+      }}
+    />
+  )
+
+  const sendStopButton = (
+    <Button
+      type="button"
+      disabled={mode === 'send' && (!input.trim() || !isConnectionOnline)}
+      onClick={() => {
+        if (mode === 'stop') {
+          void handleCancel()
+        } else {
+          void handleSend()
+        }
+      }}
+    >
+      {mode === 'stop' ? <X /> : <Send />}
+      {mode === 'stop' ? 'Stop' : 'Send'}
+    </Button>
+  )
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
-        {entries.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Messages will appear here.</p>
-        ) : (
-          entries.map((entry, index) => (
-            <ActivityEntry
-              key={entry.key || `${entry.kind}-${index}`}
-              entry={entry}
-            />
-          ))
-        )}
-        <div ref={bottomRef} />
-      </div>
+      {isWaitingForActivity ? (
+        <div className="flex flex-1 items-center justify-center">
+          <Spinner className="size-6 text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+          {entries.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Messages will appear here.</p>
+          ) : (
+            entries.map((entry, index) => (
+              <ActivityEntry
+                key={entry.key || `${entry.kind}-${index}`}
+                entry={entry}
+              />
+            ))
+          )}
+          <div ref={bottomRef} />
+        </div>
+      )}
       <div className="border-t p-3">
-        <Textarea
-          rows={2}
-          value={input}
-          onChange={(event) => setInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              void handleSend()
-            }
-          }}
-        />
+        {!isConnectionOnline ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="cursor-not-allowed">{composer}</div>
+              </TooltipTrigger>
+              <TooltipContent>Connection is not active</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          composer
+        )}
         <div className="mt-3 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -203,16 +275,18 @@ export default function ChatView({ chatId }: ChatViewProps) {
               </SelectContent>
             </Select>
           </div>
-          <Button
-            type="button"
-            disabled={!input.trim() || isSending || !isConnectionOnline}
-            onClick={() => {
-              void handleSend()
-            }}
-          >
-            <Send />
-            Send
-          </Button>
+          {mode === 'send' && !isConnectionOnline ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-not-allowed">{sendStopButton}</span>
+                </TooltipTrigger>
+                <TooltipContent>Connection is not active</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            sendStopButton
+          )}
         </div>
       </div>
     </div>

@@ -30,6 +30,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { toast } from 'sonner'
 import useChatActivityStore from '@/stores/chatActivityStore'
 import ChatView from '@/components/index/ChatView'
+import { Spinner } from '@/components/ui/spinner'
 
 function getDbmsLogo(dbms: string): { src?: string; alt: string } {
   const normalizedDbms = dbms.trim().toLowerCase()
@@ -57,7 +58,6 @@ function Index() {
   const addChat = useChatStore((state) => state.addChat)
   const renameChat = useChatStore((state) => state.renameChat)
   const removeChat = useChatStore((state) => state.removeChat)
-  const setSessionId = useChatStore((state) => state.setSessionId)
   const openChatId = useIndexStore((state) => state.openChatId)
   const openChat = useIndexStore((state) => state.openChat)
   const closeChat = useIndexStore((state) => state.closeChat)
@@ -70,7 +70,6 @@ function Index() {
   const [chatPendingRename, setChatPendingRename] = useState<Chat | null>(null)
   const [chatPendingDelete, setChatPendingDelete] = useState<Chat | null>(null)
   const [isDeletingChat, setIsDeletingChat] = useState(false)
-  const [loadingChatIds, setLoadingChatIds] = useState<Set<number>>(new Set())
   const applyAgentUpdate = useChatActivityStore((state) => state.applyAgentUpdate)
 
   useEffect(() => window.agentApi.onActivity((chatId, entry) => applyAgentUpdate(chatId, entry)), [])
@@ -287,10 +286,17 @@ function Index() {
                                 ) : (
                                   <Database className="h-4 w-4 shrink-0" aria-hidden="true" />
                                 )}
-                                <span
-                                  aria-label={isConnecting ? 'Connecting' : backendConnectionId ? 'Connected' : 'Disconnected'}
-                                  className={`h-2 w-2 shrink-0 rounded-full ${isConnecting ? 'animate-spin border-2 border-muted-foreground border-t-transparent bg-transparent' : backendConnectionId ? 'bg-green-500' : 'bg-red-500'}`}
-                                />
+                                {isConnecting ? (
+                                  <Spinner
+                                    className="h-3 w-3 shrink-0 text-muted-foreground"
+                                    aria-label="Connecting"
+                                  />
+                                ) : (
+                                  <span
+                                    aria-label={backendConnectionId ? 'Connected' : 'Disconnected'}
+                                    className={`h-2 w-2 shrink-0 rounded-full ${backendConnectionId ? 'bg-green-500' : 'bg-red-500'}`}
+                                  />
+                                )}
                                 <span className="truncate">{connection.name}</span>
                               </Button>
                             </CollapsibleTrigger>
@@ -377,7 +383,7 @@ function Index() {
             </SidebarMenu>
           </SidebarFooter>
         </Sidebar>
-        <SidebarInset>
+        <SidebarInset className="h-svh overflow-hidden">
           <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
             <div className="grid h-14 grid-cols-[auto_1fr_auto] items-center px-4">
               <SidebarTrigger />
