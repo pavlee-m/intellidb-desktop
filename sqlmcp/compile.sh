@@ -1,0 +1,1 @@
+uv run nuitka --standalone --onefile --include-module=uvicorn.protocols.websockets.websockets_sansio_impl sqlmcp.py
