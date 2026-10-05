@@ -181,7 +181,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
         if (sessionId) {
           setSessionId(chat.connectionId, chat.id, sessionId)
         }
-        setWaitForInitialActivity(false)
+        if (chat.id === -1) {
+          setWaitForInitialActivity(false)
+        }
       })
       .catch((error) => {
         console.error(error)

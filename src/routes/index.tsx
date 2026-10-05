@@ -407,7 +407,7 @@ function Index() {
           <header className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur">
             <div className="grid h-14 grid-cols-[auto_1fr_auto] items-center px-4">
               <SidebarTrigger />
-              <h1 className="text-center text-sm font-semibold tracking-wide">Home</h1>
+              <h1 className="text-center text-sm font-semibold tracking-wide">{ selectedChat?.name || 'Home' }</h1>
               <span className="h-9 w-9" aria-hidden="true" />
             </div>
           </header>
