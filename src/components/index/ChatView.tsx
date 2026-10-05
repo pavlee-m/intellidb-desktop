@@ -112,7 +112,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }, [chatId])
 
   useEffect(() => {
-    setWaitForInitialActivity(chatId !== -1)
+    // Having entries in mind here is important
+    // Otherwise, opening the chat, opening the settings, coming back, the spin animation shows forever
+    setWaitForInitialActivity(chatId !== -1 && entries.length === 0)
   }, [chatId])
 
   useEffect(() => {
