@@ -23,10 +23,10 @@ let settings: Settings;
 let connections: BackendConnection[] = [];
 let backendProcess: ChildProcess;
 
-const BACKEND_URL = 'http://localhost:8000';
+let backendUrl = 'http://localhost:8000';
 // The agent subprocess must reach the same sqlmcp instance main.ts spawned.
 // FastMCP mounts streamable HTTP at /mcp; 127.0.0.1 avoids localhost resolving to ::1.
-const SQLMCP_MCP_URL = 'http://127.0.0.1:8000/mcp';
+let sqlmcpMcpUrl = 'http://127.0.0.1:8000/mcp';
 const execFileAsync = promisify(execFile);
 
 function toBackendConnection(connection: Connection): BackendConnection {
@@ -116,6 +116,11 @@ async function initDatabase() {
       INSERT INTO Settings (Key, Value) VALUES
       ('cursor_cli_binary', 'cursor-agent');
     `);
+
+    await db.exec(`
+      INSERT INTO Settings (Key, Value) VALUES
+      ('sqlmcp_port', '8000');
+    `);
   }
 }
 
@@ -133,7 +138,7 @@ async function waitUntilBackendResponsive(): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     const id = setInterval(async () => {
       try {
-        const data = await fetch(`${BACKEND_URL}/connections`);
+        const data = await fetch(`${backendUrl}/connections`);
         if (data.ok) {
           clearInterval(id);
           resolve(true);
@@ -157,7 +162,7 @@ async function waitUntilBackendResponsive(): Promise<boolean> {
 }
 
 
-async function startBackend(): Promise<boolean> {
+async function startBackend(port: number): Promise<boolean> {
   const backendDir = getBackendDir();
   const backendPath = path.join(backendDir, 'sqlmcp.bin');
 
@@ -167,7 +172,7 @@ async function startBackend(): Promise<boolean> {
       return false;
     }
 
-    backendProcess = spawn(backendPath, [], {
+    backendProcess = spawn(backendPath, ['--port', String(port)], {
       cwd: backendDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: process.platform !== 'win32',
@@ -274,17 +279,19 @@ app.on('before-quit', async (event) => {
 app.on('ready', async () => {
   Menu.setApplicationMenu(null);
   try {
-    if (!await startBackend()) {
+    await initDatabase();
+    settings = await dbManager.getSettings();
+    backendUrl = `http://localhost:${settings.sqlmcp_port}`;
+    sqlmcpMcpUrl = `http://127.0.0.1:${settings.sqlmcp_port}/mcp`;
+    if (!await startBackend(settings.sqlmcp_port)) {
       console.error('Failed to start backend');
       app.quit();
       return;
     }
-    const response = await fetch(`${BACKEND_URL}/connections`);
+    const response = await fetch(`${backendUrl}/connections`);
     const data = await response.json();
     console.log(data);
-    setAgentMcpServers([{ type: 'http', name: 'sqlmcp', url: SQLMCP_MCP_URL, headers: [] }]);
-    await initDatabase();
-    settings = await dbManager.getSettings();
+    setAgentMcpServers([{ type: 'http', name: 'sqlmcp', url: sqlmcpMcpUrl, headers: [] }]);
     const cons: Connection[] = await dbManager.getConnections();
     connections = cons.map(toBackendConnection);
     ipcMain.handle('settings:get', async () => {
@@ -314,7 +321,7 @@ app.on('ready', async () => {
       );
 
       if (existingConnection?.backendConnectionId) {
-        await parseBackendResponse(await fetch(`${BACKEND_URL}/close_db`, {
+        await parseBackendResponse(await fetch(`${backendUrl}/close_db`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ connection_id: existingConnection.backendConnectionId }),
@@ -333,7 +340,7 @@ app.on('ready', async () => {
       );
 
       if (existingConnection?.backendConnectionId) {
-        await parseBackendResponse(await fetch(`${BACKEND_URL}/close_db`, {
+        await parseBackendResponse(await fetch(`${backendUrl}/close_db`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ connection_id: existingConnection.backendConnectionId }),
@@ -355,7 +362,7 @@ app.on('ready', async () => {
       if (!existingConnection) {
         throw new Error('Connection not found');
       }
-      const data = await parseBackendResponse(await fetch(`${BACKEND_URL}/connect_db`, {
+      const data = await parseBackendResponse(await fetch(`${backendUrl}/connect_db`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -388,7 +395,7 @@ app.on('ready', async () => {
         return;
       }
 
-      await parseBackendResponse(await fetch(`${BACKEND_URL}/close_db`, {
+      await parseBackendResponse(await fetch(`${backendUrl}/close_db`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ connection_id: existingConnection.backendConnectionId }),

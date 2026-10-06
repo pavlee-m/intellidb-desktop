@@ -1,4 +1,5 @@
 import Settings from '@/interfaces/Settings';
+import { DEFAULT_SQLMCP_PORT, parseSqlmcpPort } from '@/lib/sqlmcpPort';
 import SettingsModel from '../models/SettingsModel';
 import { Database } from 'sqlite';
 import Chat from '@/interfaces/Chat';
@@ -187,6 +188,7 @@ class DBManager {
     `);
 
     const settingsObject: Partial<Settings> = {};
+    let storedSqlmcpPort: string | undefined;
 
     for (const row of rows) {
       if (row.key === 'theme' && (row.value === 'light' || row.value === 'dark')) {
@@ -211,6 +213,11 @@ class DBManager {
 
       if (row.key === 'cursor_cli_binary') {
         settingsObject.cursor_cli_binary = row.value;
+        continue;
+      }
+
+      if (row.key === 'sqlmcp_port') {
+        storedSqlmcpPort = row.value;
       }
     }
 
@@ -220,6 +227,7 @@ class DBManager {
       opencode_binary: settingsObject.opencode_binary ?? 'opencode',
       cursor_cli_integration_enabled: settingsObject.cursor_cli_integration_enabled ?? true,
       cursor_cli_binary: settingsObject.cursor_cli_binary ?? 'cursor-agent',
+      sqlmcp_port: parseSqlmcpPort(storedSqlmcpPort ?? '') ?? DEFAULT_SQLMCP_PORT,
     };
   }
 

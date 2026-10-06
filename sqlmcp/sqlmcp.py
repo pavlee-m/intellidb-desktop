@@ -1,3 +1,7 @@
+from argparse import ArgumentParser, ArgumentTypeError
+from dataclasses import dataclass
+from typing import Sequence
+
 from objects import ExecuteSqlResult
 from helpers import utils
 from fastmcp import FastMCP
@@ -12,8 +16,39 @@ mcp.mount(http_subserver, namespace="http")
 DB_CONNECTIONS = {}
 SUPPORTED_DBMS = ['mssql']
 
-def main():
-    mcp.run(transport="stdio")
+
+@dataclass(frozen=True)
+class ListenPort:
+    value: int
+
+
+@dataclass(frozen=True)
+class CliOptions:
+    port: ListenPort
+
+
+def parse_listen_port(raw: str) -> ListenPort:
+    try:
+        value = int(raw, 10)
+    except ValueError:
+        raise ArgumentTypeError("port must be an integer from 1024 through 65535") from None
+    if not 1024 <= value <= 65535:
+        raise ArgumentTypeError("port must be an integer from 1024 through 65535")
+    return ListenPort(value)
+
+
+def parse_args(argv: Sequence[str] | None = None) -> CliOptions:
+    parser = ArgumentParser()
+    parser.add_argument("--port", type=parse_listen_port, default=ListenPort(8000))
+    return CliOptions(port=parser.parse_args(argv).port)
+
+
+def run_http(options: CliOptions) -> None:
+    mcp.run(
+        transport="http",
+        host="127.0.0.1",
+        port=options.port.value,
+    )
 
 def create_db_engine(dbms: str, username: str, password: str, database: str, host: str, conn_query: dict | None = None) -> Engine:
     if dbms not in SUPPORTED_DBMS:
@@ -118,4 +153,4 @@ async def execute_sql(
         return {"columns": columns, "rows": rows, "count": len(rows)}
 
 if __name__ == "__main__":
-    mcp.run(transport="http", host="127.0.0.1", port=8000)
+    run_http(parse_args())
