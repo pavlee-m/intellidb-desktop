@@ -15,7 +15,7 @@ export default function ChatItem({ chat, onSelect, onRename, onDelete }: ChatIte
         <ContextMenuTrigger asChild>
           <button
             type="button"
-            className="w-full rounded-md px-2 py-1 text-left hover:bg-muted"
+            className="w-full rounded-md px-2.5 py-1 text-left hover:bg-muted"
             onClick={() => onSelect(chat)}
           >
             {chat.name}

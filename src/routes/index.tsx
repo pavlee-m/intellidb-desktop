@@ -264,7 +264,7 @@ function Index() {
             </div>
           </SidebarHeader>
           <SidebarContent>
-            <SidebarMenu>
+            <SidebarMenu className="gap-1.5">
               {connections.map(({ backendConnectionId, connection, isConnecting }) => {
                 const logo = getDbmsLogo(connection.dbms)
                 const chats = chatsByConnection[connection.id]
@@ -287,7 +287,7 @@ function Index() {
                 return (
                   <SidebarMenuItem key={backendConnectionId}>
                     <Collapsible
-                      className="group w-full rounded-md data-[state=open]:bg-muted"
+                      className="group w-full rounded-md"
                       open={openByConnectionId[connection.id] ?? false}
                       onOpenChange={(open) => {
                         void handleConnectionOpenChange(connection.id, open)
@@ -295,7 +295,7 @@ function Index() {
                     >
                       <ContextMenu>
                         <ContextMenuTrigger className="flex w-full justify-center rounded-xl text-sm">
-                          <div className="group/connection flex w-full items-center">
+                          <div className="group/connection flex w-full items-center rounded-md hover:bg-muted group-data-[state=open]:bg-muted">
                             <CollapsibleTrigger asChild>
                               <Button variant="ghost" className="min-w-0 flex-1 justify-start">
                                 <ChevronDownIcon className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
@@ -374,8 +374,8 @@ function Index() {
                           </ContextMenuGroup>
                         </ContextMenuContent>
                       </ContextMenu>
-                      <CollapsibleContent className="flex flex-col items-start gap-2 p-2.5 pt-0 text-sm">
-                        <ul className="flex w-full flex-col gap-1">
+                      <CollapsibleContent className="flex flex-col items-start p-0 pt-1.5 text-sm">
+                        <ul className="flex w-full flex-col gap-1.5">
                           {(chats ?? []).map((chat) => (
                             <ChatItem
                               key={chat.id}
