@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('connectionsApi', {
     ipcRenderer.invoke('connections:connect', connectionId) as Promise<string>,
   disconnectConnection: (connectionId: number) =>
     ipcRenderer.invoke('connections:disconnect', connectionId) as Promise<void>,
+  getPassword: (connectionId: number) =>
+    ipcRenderer.invoke('connections:getPassword', connectionId) as string,
 })
 
 contextBridge.exposeInMainWorld('chatsApi', {

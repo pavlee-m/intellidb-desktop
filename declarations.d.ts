@@ -17,6 +17,7 @@ declare global {
       editConnection: (connection: Connection) => Promise<void>;
       connectConnection: (connectionId: number) => Promise<string>;
       disconnectConnection: (connectionId: number) => Promise<void>;
+      getPassword: (connectionId: number) => Promise<string>;
     };
     chatsApi: {
       getChats: (connectionId: number) => Promise<Chat[]>;

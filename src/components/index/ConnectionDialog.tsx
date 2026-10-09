@@ -92,6 +92,7 @@ export default function ConnectionDialog({
   })
 
   useEffect(() => {
+
     if (!open) {
       connectionForm.reset()
       setConnectionPendingEdit(null)
@@ -103,17 +104,25 @@ export default function ConnectionDialog({
       return
     }
 
-    connectionForm.reset({
-      name: editedConnection.name,
-      DBMS: editedConnection.dbms,
-      host: editedConnection.host,
-      username: editedConnection.username,
-      password: editedConnection.password,
-      database: editedConnection.database,
-      query_values: Object.entries(editedConnection.sqlalchemy_query ?? {}).map(
-        ([key, value]) => ({ key, value }),
-      ),
+    const getPassword = async () => {
+      const password = await window.connectionsApi.getPassword(editedConnection.id)
+      return password
+    }
+    
+    getPassword().then((password) => {
+      connectionForm.reset({
+        name: editedConnection.name,
+        DBMS: editedConnection.dbms,
+        host: editedConnection.host,
+        username: editedConnection.username,
+        password: password,
+        database: editedConnection.database,
+        query_values: Object.entries(editedConnection.sqlalchemy_query ?? {}).map(
+          ([key, value]) => ({ key, value }),
+        ),
+      })      
     })
+
   }, [open, editedConnection])
 
   return (

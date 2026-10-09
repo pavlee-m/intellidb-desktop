@@ -12,6 +12,15 @@ import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
 import { ensureAgent, promptAgent, setAgentSessionPersister, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest } from './lib/AgentHost';
+import { encryptSecret, decryptSecret } from './lib/encryptedStorage';
+
+// On Linux, Chromium auto-detects the keyring backend from the desktop
+// environment. Non-GNOME/KDE sessions (e.g. Hyprland) are not recognized,
+// which silently falls back to "basic_text" (non-encrypted) storage.
+// Explicitly select the libsecret/gnome-keyring backend instead.
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
+}
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -303,6 +312,7 @@ app.on('ready', async () => {
     });
 
     ipcMain.handle('connections:add', async (_event, connection: Omit<Connection, 'id'>) => {
+      connection.password = encryptSecret(connection.password);
       const id = await dbManager.addConnection(connection);
       const addedConnection = (await dbManager.getConnections()).find(
         (currentConnection) => currentConnection.id === id,
@@ -313,6 +323,16 @@ app.on('ready', async () => {
       }
 
       return id;
+    });
+
+    ipcMain.handle('connections:getPassword', async (_event, connectionId: number) => {
+      const existingConnection = connections.find(
+        ({ connection }) => connection.id === connectionId,
+      );
+      if (!existingConnection) {
+        throw new Error('Connection not found');
+      }
+      return decryptSecret(existingConnection.connection.password);
     });
 
     ipcMain.handle('connections:delete', async (_event, connectionId: number) => {
@@ -346,7 +366,9 @@ app.on('ready', async () => {
           body: JSON.stringify({ connection_id: existingConnection.backendConnectionId }),
         }));
       }
-
+      // Password is unencrypted in the edit form, therefore, when edit reaches here, it does not
+      // Encrypt the password twice.
+      connection.password = encryptSecret(connection.password);
       await dbManager.editConnection(connection);
       connections = connections.map((backendConnection) =>
         backendConnection.connection.id === connection.id
@@ -368,7 +390,7 @@ app.on('ready', async () => {
         body: JSON.stringify({
           dbms: existingConnection.connection.dbms,
           username: existingConnection.connection.username,
-          password: existingConnection.connection.password,
+          password: decryptSecret(existingConnection.connection.password),
           database: existingConnection.connection.database,
           host: existingConnection.connection.host,
           conn_query: existingConnection.connection.sqlalchemy_query,
