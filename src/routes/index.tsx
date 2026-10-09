@@ -357,6 +357,7 @@ function Index() {
                               New chat
                             </ContextMenuItem>
                             <ContextMenuItem
+                              disabled={!!backendConnectionId}
                               onSelect={(event) => {
                                 event.preventDefault()
                                 setConnectionPendingDelete(connection)
@@ -364,10 +365,12 @@ function Index() {
                             >
                               Delete
                             </ContextMenuItem>
-                            <ContextMenuItem onSelect={() => {
-                              setConnectionPendingEdit(connection)
-                              setIsConnectionDialogOpen(true)
-                            }}>Edit</ContextMenuItem>
+                            <ContextMenuItem
+                              disabled={!!backendConnectionId}
+                              onSelect={() => {
+                                setConnectionPendingEdit(connection)
+                                setIsConnectionDialogOpen(true)
+                              }}>Edit</ContextMenuItem>
                           </ContextMenuGroup>
                         </ContextMenuContent>
                       </ContextMenu>
