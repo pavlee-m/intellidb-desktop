@@ -97,7 +97,8 @@ class DBManager {
           ConnectionID AS connectionId,
           Name AS name,
           CreatedAt AS createdAt,
-          SessionID AS sessionId
+          SessionID AS sessionId,
+          Provider AS provider
         FROM Chat
         WHERE ConnectionID = ?
         ORDER BY ID;
@@ -114,7 +115,8 @@ class DBManager {
           ConnectionID AS connectionId,
           Name AS name,
           CreatedAt AS createdAt,
-          SessionID AS sessionId
+          SessionID AS sessionId,
+          Provider AS provider
         FROM Chat
         WHERE ID = ?;
       `,
@@ -138,7 +140,8 @@ class DBManager {
           ConnectionID AS connectionId,
           Name AS name,
           CreatedAt AS createdAt,
-          SessionID AS sessionId
+          SessionID AS sessionId,
+          Provider AS provider
         FROM Chat
         WHERE ID = ?;
       `,
@@ -146,6 +149,32 @@ class DBManager {
     );
 
     return chat!;
+  }
+
+  async ensureChatProviderColumn(): Promise<void> {
+    const columns = await this.db.all<{ name: string }[]>(`PRAGMA table_info(Chat)`);
+    if (columns.some((column) => column.name === 'Provider')) {
+      return;
+    }
+
+    await this.db.exec(`ALTER TABLE Chat ADD COLUMN Provider TEXT NOT NULL DEFAULT ''`);
+    // Chats that already have a session were opened through Cursor. New chats stay unset.
+    await this.db.run(`
+      UPDATE Chat
+      SET Provider = 'cursor'
+      WHERE SessionID IS NOT NULL AND SessionID != '';
+    `);
+  }
+
+  async updateChatProvider(chatId: number, provider: string): Promise<void> {
+    await this.db.run(
+      `
+        UPDATE Chat
+        SET Provider = ?
+        WHERE ID = ?;
+      `,
+      [provider, chatId],
+    );
   }
 
   async updateChatSessionId(chatId: number, sessionId: string): Promise<void> {

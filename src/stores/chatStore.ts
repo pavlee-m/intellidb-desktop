@@ -50,6 +50,16 @@ const useChatStore = create<ChatState>((set) => ({
         ),
       },
     })),
+
+  setProvider: (connectionId, chatId, provider) =>
+    set((state) => ({
+      chatsByConnection: {
+        ...state.chatsByConnection,
+        [connectionId]: (state.chatsByConnection[connectionId] ?? []).map((chat) =>
+          chat.id === chatId ? { ...chat, provider } : chat,
+        ),
+      },
+    })),
 }))
 
 export default useChatStore

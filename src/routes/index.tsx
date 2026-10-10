@@ -141,7 +141,14 @@ function Index() {
   const handleCreateChat = async (connectionId: number) => {
     // Placeholders.
     if (!chatsByConnection[connectionId]?.find((chat) => chat.id === -1)) {
-      addChat(connectionId, { id: -1, connectionId: connectionId, name: 'New chat', sessionId: '' } as Chat);
+      addChat(connectionId, {
+        id: -1,
+        connectionId,
+        name: 'New chat',
+        createdAt: '',
+        sessionId: '',
+        provider: '',
+      });
     }
     openChat(-1)
   }

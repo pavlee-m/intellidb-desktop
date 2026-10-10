@@ -8,7 +8,9 @@ import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
@@ -25,6 +27,15 @@ import useChatStore from '@/stores/chatStore'
 import useIndexStore from '@/stores/indexStore'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import { Spinner } from '@/components/ui/spinner'
+import {
+  OPENCODE_STUB_MODELS,
+  type AvailableModel,
+} from '@/lib/opencodeStubModels'
+import useSettingsStore from '@/stores/settingsStore'
+
+function choiceKey(model: AvailableModel): string {
+  return `${model.provider}:${model.id}`
+}
 
 interface ChatViewProps {
   chatId: number
@@ -85,11 +96,17 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const [waitForInitialActivity, setWaitForInitialActivity] = useState(chatId === -1 ? false: true)
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
-  const [stubValue, setStubValue] = useState<string>()
+  const [cursorModels, setCursorModels] = useState<AvailableModel[]>([])
+  const [modelKey, setModelKey] = useState('')
+  const [reasoning, setReasoning] = useState('')
+  const [fast, setFast] = useState(false)
+  const settings = useSettingsStore((state) => state.settings)
+  const setSettings = useSettingsStore((state) => state.setSettings)
   const bottomRef = useRef<HTMLDivElement>(null)
   const addChat = useChatStore((state) => state.addChat)
   const removeChat = useChatStore((state) => state.removeChat)
   const setSessionId = useChatStore((state) => state.setSessionId)
+  const setProvider = useChatStore((state) => state.setProvider)
   const setConnectionOpen = useIndexStore((state) => state.setConnectionOpen)
   const openChat = useIndexStore((state) => state.openChat)
   const backendConnections = useBackendConnectionStore((state) => state.backendConnections)
@@ -124,10 +141,73 @@ export default function ChatView({ chatId }: ChatViewProps) {
     }
   }, [currentChat?.id, isConnectionOnline])
 
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const loaded = settings ?? await window.settingsApi.getSettings()
+      if (!settings) {
+        setSettings(loaded)
+        return
+      }
+      if (cancelled) {
+        return
+      }
+      if (!loaded.cursor_cli_integration_enabled) {
+        setCursorModels([])
+        return
+      }
+      try {
+        const rows = await window.modelsApi.listCursor()
+        if (cancelled) {
+          return
+        }
+        setCursorModels(rows.map((row) => ({
+          provider: 'cursor',
+          id: row.id,
+          name: row.name,
+          reasoningOptions: [...row.reasoningOptions],
+          hasFast: row.hasFast,
+        })))
+      } catch (error) {
+        if (!cancelled) {
+          setCursorModels([])
+          toast.error(error instanceof Error ? error.message : String(error))
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [settings, setSettings])
+
+  const catalog: AvailableModel[] = [
+    ...(settings?.cursor_cli_integration_enabled ? cursorModels : []),
+    ...(settings?.opencode_integration_enabled ? OPENCODE_STUB_MODELS : []),
+  ]
+  const lockedProvider = currentChat?.provider ?? ''
+  const visibleModels = lockedProvider
+    ? catalog.filter((model) => model.provider === lockedProvider)
+    : catalog
+  const selectedModel = visibleModels.find((model) => choiceKey(model) === modelKey) ?? visibleModels[0]
+  const reasoningValue = selectedModel?.reasoningOptions.includes(reasoning)
+    ? reasoning
+    : selectedModel?.reasoningOptions[0] ?? ''
+
+  const handleModelChange = (nextKey: string) => {
+    const next = visibleModels.find((model) => choiceKey(model) === nextKey)
+    setModelKey(nextKey)
+    setReasoning(next?.reasoningOptions[0] ?? '')
+    setFast(false)
+  }
+
   const handleSend = async () => {
     if (!isConnectionOnline) return
     const text = input.trim()
     if (!text || isSending) return
+    if (selectedModel?.provider === 'opencode') {
+      toast.error('OpenCode is not connected yet')
+      return
+    }
 
     let chat = currentChat
     if (chat && chat.id === -1) {
@@ -146,6 +226,17 @@ export default function ChatView({ chatId }: ChatViewProps) {
     setInput('')
     pushUserMessage(chat.id, text)
     try {
+      if (selectedModel && !chat.provider) {
+        await window.chatsApi.setProvider(chat.id, selectedModel.provider)
+        setProvider(chat.connectionId, chat.id, selectedModel.provider)
+      }
+      if (selectedModel?.provider === 'cursor') {
+        await window.agentApi.applyModel(chat.id, {
+          modelId: selectedModel.id,
+          reasoning: reasoningValue || undefined,
+          fast: selectedModel.hasFast && fast,
+        })
+      }
       await window.agentApi.prompt(chat.id, text)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -199,7 +290,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
       rows={2}
       value={input}
       disabled={!isConnectionOnline || isWaitingForActivity}
-      className={!isConnectionOnline ? 'pointer-events-none' : undefined}
+      className={!isConnectionOnline
+        ? 'pointer-events-none border-0 shadow-none focus-visible:ring-0'
+        : 'border-0 shadow-none focus-visible:ring-0'}
       onChange={(event) => setInput(event.target.value)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' && !event.shiftKey) {
@@ -249,34 +342,74 @@ export default function ChatView({ chatId }: ChatViewProps) {
         </div>
       )}
       <div className="border-t p-3">
-        {!isConnectionOnline ? (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="cursor-not-allowed">{composer}</div>
-              </TooltipTrigger>
-              <TooltipContent>Connection is not active</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          composer
-        )}
-        <div className="mt-3 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="rounded-lg border border-input">
+          {!isConnectionOnline ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="cursor-not-allowed">{composer}</div>
+                </TooltipTrigger>
+                <TooltipContent>Connection is not active</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            composer
+          )}
+          <div className="flex items-center justify-between gap-3 px-2 pb-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Select
+              value={selectedModel ? choiceKey(selectedModel) : undefined}
+              onValueChange={handleModelChange}
+              disabled={visibleModels.length === 0}
+            >
+              <SelectTrigger size="sm" className="w-44">
+                <SelectValue placeholder="Model" />
+              </SelectTrigger>
+              <SelectContent>
+                {(['cursor', 'opencode'] as const).map((provider) => {
+                  const group = visibleModels.filter((model) => model.provider === provider)
+                  if (group.length === 0) {
+                    return null
+                  }
+                  return (
+                    <SelectGroup key={provider}>
+                      <SelectLabel>{provider === 'cursor' ? 'Cursor' : 'OpenCode'}</SelectLabel>
+                      {group.map((model) => (
+                        <SelectItem key={choiceKey(model)} value={choiceKey(model)}>
+                          {model.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )
+                })}
+              </SelectContent>
+            </Select>
+            <Select
+              value={reasoningValue || undefined}
+              onValueChange={setReasoning}
+              disabled={!selectedModel || selectedModel.reasoningOptions.length === 0}
+            >
+              <SelectTrigger size="sm" className="w-32">
+                <SelectValue placeholder="Reasoning" />
+              </SelectTrigger>
+              <SelectContent>
+                {selectedModel?.reasoningOptions.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {selectedModel?.hasFast ? (
+              <div className="flex items-center gap-2">
+                <Switch id="model-fast" checked={fast} onCheckedChange={setFast} />
+                <Label htmlFor="model-fast">Fast</Label>
+              </div>
+            ) : null}
             <div className="flex items-center gap-2">
               <Switch id="dangerous-queries" defaultChecked={false} />
               <Label htmlFor="dangerous-queries">Dangerous queries</Label>
             </div>
-            <Select value={stubValue} onValueChange={setStubValue}>
-              <SelectTrigger>
-                <SelectValue placeholder="Stub" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="option-a">Option A</SelectItem>
-                <SelectItem value="option-b">Option B</SelectItem>
-                <SelectItem value="option-c">Option C</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
           {mode === 'send' && !isConnectionOnline ? (
             <TooltipProvider>
@@ -290,6 +423,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
           ) : (
             sendStopButton
           )}
+          </div>
         </div>
       </div>
     </div>

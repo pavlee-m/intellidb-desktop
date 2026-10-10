@@ -6,6 +6,23 @@ import { ChildProcess, spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { ACPClient } from "./ACPClient";
 
+function flatConfigValues(option: acp.SessionConfigOption): string[] {
+    if (option.type !== "select") {
+        return [];
+    }
+    const values: string[] = [];
+    for (const item of option.options) {
+        if ("options" in item) {
+            for (const child of item.options) {
+                values.push(child.value);
+            }
+        } else {
+            values.push(item.value);
+        }
+    }
+    return values;
+}
+
 export class CursorClient implements ProviderClient {
 
     private acpClient!: ACPClient;
@@ -59,6 +76,11 @@ export class CursorClient implements ProviderClient {
         const initResult = await Promise.race([
             this.connection.agent.request(acp.methods.agent.initialize, {
                 protocolVersion: acp.PROTOCOL_VERSION,
+                // Without this flag Cursor only accepts one preset model string.
+                // With it, model, effort, and fast are separate config options.
+                clientCapabilities: {
+                    _meta: { parameterizedModelPicker: true },
+                },
             }),
             spawnFailed,
         ]);
@@ -79,6 +101,31 @@ export class CursorClient implements ProviderClient {
         }
 
         return initResult;
+    }
+
+    async applyModelChoice(choice: { modelId: string; reasoning?: string; fast: boolean }): Promise<void> {
+        const afterModel = await this.setConfigOption("model", choice.modelId);
+        const effort = (afterModel.configOptions ?? []).find((option) => {
+            if (option.category !== "thought_level" || option.type !== "select") {
+                return false;
+            }
+            return flatConfigValues(option).some((value) => value !== "true" && value !== "false");
+        });
+        if (choice.reasoning && effort?.type === "select" && flatConfigValues(effort).includes(choice.reasoning)) {
+            await this.setConfigOption(effort.id, choice.reasoning);
+        }
+        const fast = (afterModel.configOptions ?? []).find((option) => option.id === "fast");
+        if (fast) {
+            await this.setConfigOption("fast", choice.fast ? "true" : "false");
+        }
+    }
+
+    private setConfigOption(configId: string, value: string): Promise<acp.SetSessionConfigOptionResponse> {
+        return this.connection.agent.request(acp.methods.agent.session.setConfigOption, {
+            sessionId: this.sessionId,
+            configId,
+            value,
+        });
     }
 
     async sendMessage(text: string): Promise<acp.PromptResponse> {

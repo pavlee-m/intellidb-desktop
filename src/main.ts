@@ -11,7 +11,8 @@ import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
-import { ensureAgent, promptAgent, setAgentSessionPersister, setCursorCliCommandProvider, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest } from './lib/AgentHost';
+import { ensureAgent, promptAgent, applyModelChoice, setAgentSessionPersister, setCursorCliCommandProvider, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest } from './lib/AgentHost';
+import { fetchCursorModels } from './lib/ModelFetching';
 import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND } from './lib/cursorCliCommand';
 import { encryptSecret, decryptSecret } from './lib/encryptedStorage';
 
@@ -97,6 +98,7 @@ async function initDatabase() {
         Name TEXT NOT NULL,
         CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
         SessionID TEXT,
+        Provider TEXT NOT NULL DEFAULT '',
         FOREIGN KEY (ConnectionID) REFERENCES Connection(ID) ON DELETE CASCADE
       );
     `);
@@ -132,6 +134,8 @@ async function initDatabase() {
       ('sqlmcp_port', '8000');
     `);
   }
+
+  await dbManager.ensureChatProviderColumn();
 }
 
 function getBackendDir(): string {
@@ -452,6 +456,26 @@ app.on('ready', async () => {
     ipcMain.handle('chats:delete', async (_event, chatId: number) => {
       await dbManager.deleteChat(chatId);
       disposeAgent(chatId);
+    });
+
+    ipcMain.handle('chats:setProvider', async (_event, chatId: number, provider: string) => {
+      await dbManager.updateChatProvider(chatId, provider);
+    });
+
+    ipcMain.handle('models:cursor', async () => {
+      const loaded = await dbManager.getSettings();
+      if (!loaded.cursor_cli_integration_enabled) {
+        return [];
+      }
+      return fetchCursorModels(await dbManager.getCursorCliCommand());
+    });
+
+    ipcMain.handle('agent:applyModel', async (
+      _event,
+      chatId: number,
+      choice: { modelId: string; reasoning?: string; fast: boolean },
+    ) => {
+      await applyModelChoice(chatId, choice);
     });
 
     // Give the agent host a method to persist the session id to the database.

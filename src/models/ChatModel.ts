@@ -4,4 +4,5 @@ export default interface ChatModel {
   name: string;
   createdAt: string;
   sessionId: string;
+  provider: string;
 }

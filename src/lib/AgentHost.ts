@@ -149,6 +149,17 @@ export async function ensureAgent(
     return client?.getSessionId() ?? '';
 }
 
+export async function applyModelChoice(
+  chatId: number,
+  choice: { modelId: string; reasoning?: string; fast: boolean },
+): Promise<void> {
+  const agent = agents.get(chatId);
+  if (!agent?.client) {
+    throw new Error('Agent is not connected');
+  }
+  await agent.client.applyModelChoice(choice);
+}
+
 export async function cancelRequest(chatId: number): Promise<void> {
   const agent = agents.get(chatId);
   if (!agent) {

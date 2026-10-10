@@ -8,4 +8,5 @@ export default interface ChatState {
   renameChat: (connectionId: number, chatId: number, name: string) => void
   removeChat: (connectionId: number, chatId: number) => void
   setSessionId: (connectionId: number, chatId: number, sessionId: string) => void
+  setProvider: (connectionId: number, chatId: number, provider: string) => void
 }

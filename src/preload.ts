@@ -4,6 +4,7 @@ import Chat from '@/interfaces/Chat'
 import Connection from '@/interfaces/Connection'
 import BackendConnection from './interfaces/BackendConnection'
 import type ChatActivity from '@/interfaces/ChatActivity'
+import type Model from '@/lib/Model'
 
 contextBridge.exposeInMainWorld('settingsApi', {
   getSettings: () => ipcRenderer.invoke('settings:get') as Promise<Settings>,
@@ -36,6 +37,12 @@ contextBridge.exposeInMainWorld('chatsApi', {
     ipcRenderer.invoke('chats:rename', chatId, name) as Promise<void>,
   deleteChat: (chatId: number) =>
     ipcRenderer.invoke('chats:delete', chatId) as Promise<void>,
+  setProvider: (chatId: number, provider: string) =>
+    ipcRenderer.invoke('chats:setProvider', chatId, provider) as Promise<void>,
+})
+
+contextBridge.exposeInMainWorld('modelsApi', {
+  listCursor: () => ipcRenderer.invoke('models:cursor') as Promise<Model[]>,
 })
 
 contextBridge.exposeInMainWorld('agentApi', {
@@ -53,4 +60,8 @@ contextBridge.exposeInMainWorld('agentApi', {
   },
   cancel: (chatId: number) =>
     ipcRenderer.invoke('agent:cancel', chatId) as Promise<void>,
+  applyModel: (
+    chatId: number,
+    choice: { modelId: string; reasoning?: string; fast: boolean },
+  ) => ipcRenderer.invoke('agent:applyModel', chatId, choice) as Promise<void>,
 })

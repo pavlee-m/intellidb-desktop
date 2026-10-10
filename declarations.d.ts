@@ -3,6 +3,7 @@ type Settings = import('./src/interfaces/Settings').default;
 type Connection = import('./src/interfaces/Connection').default;
 type Chat = import('./src/interfaces/Chat').default;
 type ChatActivity = import('./src/interfaces/ChatActivity').default;
+type Model = import('./src/lib/Model').default;
 
 declare global {
   interface Window {
@@ -24,11 +25,19 @@ declare global {
       addChat: (connectionId: number) => Promise<Chat>;
       renameChat: (chatId: number, name: string) => Promise<void>;
       deleteChat: (chatId: number) => Promise<void>;
+      setProvider: (chatId: number, provider: string) => Promise<void>;
+    };
+    modelsApi: {
+      listCursor: () => Promise<Model[]>;
     };
     agentApi: {
       connect: (chatId: number, sessionId: string | null) => Promise<string>;
       prompt: (chatId: number, text: string) => Promise<unknown>;
       cancel: (chatId: number) => Promise<void>;
+      applyModel: (
+        chatId: number,
+        choice: { modelId: string; reasoning?: string; fast: boolean },
+      ) => Promise<void>;
       onActivity: (callback: (chatId: number, entry: ChatActivity) => void) => () => void;
     };
   }
