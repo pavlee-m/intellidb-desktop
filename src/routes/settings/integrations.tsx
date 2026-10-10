@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState, type ChangeEvent } from 'react'
 import { Input } from '@/components/ui/input'
+import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND } from '@/lib/cursorCliCommand'
 import useSettingsStore from '@/stores/settingsStore';
 import opencodeLogo from '@/assets/opencode.svg';
 import cursorLogo from '@/assets/cursor.svg';
@@ -16,7 +17,7 @@ function IntegrationsPage() {
     settings?.opencode_binary ? settings.opencode_binary : 'opencode',
   );
   const [cursorCliBinaryPath, setCursorCliBinaryPath] = useState(
-    settings?.cursor_cli_binary ? settings.cursor_cli_binary : 'cursor-agent',
+    settings?.cursor_cli_binary ? settings.cursor_cli_binary : DEFAULT_CURSOR_CLI_COMMAND,
   );
 
   useEffect(() => {
@@ -53,9 +54,9 @@ function IntegrationsPage() {
 
   const handleCursorCliBinaryBlur = () => {
     const trimmedBinary = cursorCliBinaryPath.trim()
-    const nextBinary = trimmedBinary.length > 0 ? trimmedBinary : 'cursor-agent'
+    const nextBinary = trimmedBinary.length > 0 ? trimmedBinary : DEFAULT_CURSOR_CLI_COMMAND
     setCursorCliBinaryPath(nextBinary)
-    window.settingsApi.updateSetting('cursor_cli_binary', nextBinary).then(setSettings).catch(console.error);
+    window.settingsApi.updateSetting(CURSOR_CLI_BINARY_KEY, nextBinary).then(setSettings).catch(console.error);
   }
 
   return (
@@ -142,7 +143,7 @@ function IntegrationsPage() {
             id="cursor-cli-binary"
             onBlur={handleCursorCliBinaryBlur}
             onChange={handleCursorCliBinaryChange}
-            placeholder="cursor-agent"
+            placeholder={DEFAULT_CURSOR_CLI_COMMAND}
             spellCheck={false}
             value={cursorCliBinaryPath}
           />

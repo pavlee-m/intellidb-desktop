@@ -2,6 +2,7 @@ import ChatActivity from '@/interfaces/ChatActivity';
 import ACPClientHandlers from '@/interfaces/ACPClientHandlers';
 import ProviderClient from '@/interfaces/ProviderClient';
 import { CursorClient } from '@/acp/CursorClient';
+import type { CursorCliCommand } from '@/lib/cursorCliCommand';
 import type * as acp from '@agentclientprotocol/sdk';
 
 const agents = new Map<number, { client: ProviderClient | undefined; ready: boolean }>();
@@ -91,13 +92,20 @@ export function setAgentSessionPersister(persister: (chatId: number, sessionId: 
     persistSessionId = persister;
 }
 
+let cursorCliCommandProvider: (() => Promise<CursorCliCommand>) | undefined;
+
+export function setCursorCliCommandProvider(provider: () => Promise<CursorCliCommand>): void {
+    cursorCliCommandProvider = provider;
+}
+
 async function startAgent(
     chatId: number,
     sessionId: string | undefined,
     onActivity: (entry: ChatActivity) => void,
+    command: CursorCliCommand,
 ): Promise<{ client: ProviderClient | undefined; ready: boolean }> {
     agents.set(chatId, { client: undefined, ready: false });
-    const client = new CursorClient(createHandlers(onActivity), sessionId, agentMcpServers);
+    const client = new CursorClient(createHandlers(onActivity), command, sessionId, agentMcpServers);
     try{
       await client.connect();
     }
@@ -123,13 +131,18 @@ export async function ensureAgent(
         return existing.client?.getSessionId() ?? '';
     }
 
+    if (!cursorCliCommandProvider) {
+        throw new Error('Cursor CLI command provider is not set');
+    }
+    const command = await cursorCliCommandProvider();
+
     const storedId = sessionId && sessionId.length > 0 ? sessionId : undefined;
     let client: ProviderClient | undefined;
     let ready: boolean;
-    ({ client, ready } = await startAgent(chatId, storedId, onActivity));
+    ({ client, ready } = await startAgent(chatId, storedId, onActivity, command));
     if (!client) {
       console.log("Failed to connect to existing agent, creating a new agent");
-      ({ client, ready } = await startAgent(chatId, undefined, onActivity));
+      ({ client, ready } = await startAgent(chatId, undefined, onActivity, command));
     }
     // A stored id can be stale; fall back to a fresh session.
     agents.set(chatId, { client, ready });

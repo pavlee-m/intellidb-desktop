@@ -11,7 +11,8 @@ import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
-import { ensureAgent, promptAgent, setAgentSessionPersister, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest } from './lib/AgentHost';
+import { ensureAgent, promptAgent, setAgentSessionPersister, setCursorCliCommandProvider, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest } from './lib/AgentHost';
+import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND } from './lib/cursorCliCommand';
 import { encryptSecret, decryptSecret } from './lib/encryptedStorage';
 
 // On Linux, Chromium auto-detects the keyring backend from the desktop
@@ -123,7 +124,7 @@ async function initDatabase() {
 
     await db.exec(`
       INSERT INTO Settings (Key, Value) VALUES
-      ('cursor_cli_binary', 'cursor-agent');
+      ('${CURSOR_CLI_BINARY_KEY}', '${DEFAULT_CURSOR_CLI_COMMAND}');
     `);
 
     await db.exec(`
@@ -455,6 +456,7 @@ app.on('ready', async () => {
 
     // Give the agent host a method to persist the session id to the database.
     setAgentSessionPersister((chatId, sessionId) => dbManager.updateChatSessionId(chatId, sessionId));
+    setCursorCliCommandProvider(() => dbManager.getCursorCliCommand());
 
     ipcMain.handle('agent:connect', async (event, chatId: number, sessionId: string) : Promise<string> => {
       return ensureAgent(chatId, sessionId, (entry) => event.sender.send('agent:activity', { chatId, entry }));

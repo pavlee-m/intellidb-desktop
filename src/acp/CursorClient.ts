@@ -1,5 +1,6 @@
 import ACPClientHandlers from "../interfaces/ACPClientHandlers";
 import ProviderClient from "../interfaces/ProviderClient";
+import type { CursorCliCommand } from "../lib/cursorCliCommand";
 import * as acp from "@agentclientprotocol/sdk";
 import { ChildProcess, spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
@@ -18,6 +19,7 @@ export class CursorClient implements ProviderClient {
 
     constructor(
         private handlers: ACPClientHandlers,
+        private command: CursorCliCommand,
         private existingSessionId?: string,
         private mcpServers: acp.McpServer[] = [],
     ) {
@@ -30,7 +32,7 @@ export class CursorClient implements ProviderClient {
     }
 
     async connect(): Promise<acp.InitializeResponse> {
-        this.agentProcess = spawn("agent", ["--model", "composer-2.5", "acp"], {
+        this.agentProcess = spawn(this.command, ["--model", "composer-2.5", "acp"], {
             stdio: ["pipe", "pipe", "inherit"],
         });
 
@@ -48,9 +50,18 @@ export class CursorClient implements ProviderClient {
                 Readable.toWeb(this.agentProcess.stdout!) as unknown as ReadableStream<Uint8Array>,
             ));
 
-        let initResult: acp.InitializeResponse = await this.connection.agent.request(acp.methods.agent.initialize, {
-            protocolVersion: acp.PROTOCOL_VERSION,
+        let onSpawnError: (error: Error) => void = () => undefined;
+        const spawnFailed = new Promise<never>((_, reject) => {
+            onSpawnError = reject;
         });
+        this.agentProcess.once("error", onSpawnError);
+
+        const initResult = await Promise.race([
+            this.connection.agent.request(acp.methods.agent.initialize, {
+                protocolVersion: acp.PROTOCOL_VERSION,
+            }),
+            spawnFailed,
+        ]);
 
         if (this.existingSessionId) {
             let loaded: acp.LoadSessionResponse = await this.connection.agent.request(acp.methods.agent.session.load, {

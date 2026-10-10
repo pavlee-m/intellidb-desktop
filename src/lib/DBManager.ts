@@ -1,4 +1,5 @@
 import Settings from '@/interfaces/Settings';
+import { CURSOR_CLI_BINARY_KEY, parseCursorCliCommand, type CursorCliCommand } from '@/lib/cursorCliCommand';
 import { DEFAULT_SQLMCP_PORT, parseSqlmcpPort } from '@/lib/sqlmcpPort';
 import SettingsModel from '../models/SettingsModel';
 import { Database } from 'sqlite';
@@ -226,9 +227,22 @@ class DBManager {
       opencode_integration_enabled: settingsObject.opencode_integration_enabled ?? true,
       opencode_binary: settingsObject.opencode_binary ?? 'opencode',
       cursor_cli_integration_enabled: settingsObject.cursor_cli_integration_enabled ?? true,
-      cursor_cli_binary: settingsObject.cursor_cli_binary ?? 'cursor-agent',
+      cursor_cli_binary: parseCursorCliCommand(settingsObject.cursor_cli_binary),
       sqlmcp_port: parseSqlmcpPort(storedSqlmcpPort ?? '') ?? DEFAULT_SQLMCP_PORT,
     };
+  }
+
+  async getCursorCliCommand(): Promise<CursorCliCommand> {
+    const row = await this.db.get<SettingsModel>(
+      `
+        SELECT Value AS value
+        FROM Settings
+        WHERE Key = ?;
+      `,
+      [CURSOR_CLI_BINARY_KEY],
+    );
+
+    return parseCursorCliCommand(row?.value);
   }
 
   async updateSetting(key: string, value: string): Promise<void> {
