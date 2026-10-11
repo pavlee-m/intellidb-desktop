@@ -49,7 +49,7 @@ export class CursorClient implements ProviderClient {
     }
 
     async connect(): Promise<acp.InitializeResponse> {
-        this.agentProcess = spawn(this.command, ["--model", "composer-2.5", "acp"], {
+        this.agentProcess = spawn(this.command, ["acp"], {
             stdio: ["pipe", "pipe", "inherit"],
         });
 

@@ -24,16 +24,16 @@ import {
 } from '@/components/ui/tooltip'
 import Chat from '@/interfaces/Chat'
 import useChatStore from '@/stores/chatStore'
-import useIndexStore from '@/stores/indexStore'
+import useGlobalStore from '@/stores/globalStore'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import { Spinner } from '@/components/ui/spinner'
 import {
   OPENCODE_STUB_MODELS,
-  type AvailableModel,
 } from '@/lib/opencodeStubModels'
+import Model, { ReasoningOption } from '@/lib/Model'
 import useSettingsStore from '@/stores/settingsStore'
 
-function choiceKey(model: AvailableModel): string {
+function choiceKey(model: Model): string {
   return `${model.provider}:${model.id}`
 }
 
@@ -96,10 +96,16 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const [waitForInitialActivity, setWaitForInitialActivity] = useState(chatId === -1 ? false: true)
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
-  const [cursorModels, setCursorModels] = useState<AvailableModel[]>([])
-  const [modelKey, setModelKey] = useState('')
-  const [reasoning, setReasoning] = useState('')
-  const [fast, setFast] = useState(false)
+  const [cursorModels, setCursorModels] = useState<Model[]>([])
+  const selectedModel = useGlobalStore((state) => state.selectedModel[chatId])
+  const reasoning = useGlobalStore((state) => state.reasoning[chatId])
+  const fast = useGlobalStore((state) => state.fast[chatId])
+  const setSelectedModel = useGlobalStore((state) => state.setSelectedModel)
+  const setReasoning = useGlobalStore((state) => state.setReasoning)
+  const setFast = useGlobalStore((state) => state.setFast)
+  const removeSelectedModel = useGlobalStore((state) => state.removeSelectedModel)
+  const removeReasoning = useGlobalStore((state) => state.removeReasoning)
+  const removeFast = useGlobalStore((state) => state.removeFast)
   const settings = useSettingsStore((state) => state.settings)
   const setSettings = useSettingsStore((state) => state.setSettings)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -107,8 +113,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const removeChat = useChatStore((state) => state.removeChat)
   const setSessionId = useChatStore((state) => state.setSessionId)
   const setProvider = useChatStore((state) => state.setProvider)
-  const setConnectionOpen = useIndexStore((state) => state.setConnectionOpen)
-  const openChat = useIndexStore((state) => state.openChat)
+  const setConnectionOpen = useGlobalStore((state) => state.setConnectionOpen)
+  const openChat = useGlobalStore((state) => state.openChat)
   const backendConnections = useBackendConnectionStore((state) => state.backendConnections)
   const isConnectionOnline = Boolean(
     backendConnections.find(
@@ -126,6 +132,15 @@ export default function ChatView({ chatId }: ChatViewProps) {
     return window.agentApi.onActivity((activityChatId) => {
       if (activityChatId === chatId) setWaitForInitialActivity(false)
     })
+  }, [chatId])
+
+  useEffect(() => {
+    // Get model from store, if no set, set first model from visibleModels
+    if (!selectedModel) {
+      setSelectedModel(chatId, visibleModels[0])
+      setReasoning(chatId, visibleModels[0].reasoningOptions[0])
+      setFast(chatId, false)
+    }
   }, [chatId])
 
   useEffect(() => {
@@ -180,7 +195,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     }
   }, [settings, setSettings])
 
-  const catalog: AvailableModel[] = [
+  const catalog: Model[] = [
     ...(settings?.cursor_cli_integration_enabled ? cursorModels : []),
     ...(settings?.opencode_integration_enabled ? OPENCODE_STUB_MODELS : []),
   ]
@@ -188,16 +203,13 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const visibleModels = lockedProvider
     ? catalog.filter((model) => model.provider === lockedProvider)
     : catalog
-  const selectedModel = visibleModels.find((model) => choiceKey(model) === modelKey) ?? visibleModels[0]
-  const reasoningValue = selectedModel?.reasoningOptions.includes(reasoning)
-    ? reasoning
-    : selectedModel?.reasoningOptions[0] ?? ''
 
   const handleModelChange = (nextKey: string) => {
     const next = visibleModels.find((model) => choiceKey(model) === nextKey)
-    setModelKey(nextKey)
-    setReasoning(next?.reasoningOptions[0] ?? '')
-    setFast(false)
+    if (!next) return;
+    setSelectedModel(chatId, next ?? visibleModels[0])
+    setReasoning(chatId, next?.reasoningOptions[0] ?? '')
+    setFast(chatId, false)
   }
 
   const handleSend = async () => {
@@ -216,6 +228,15 @@ export default function ChatView({ chatId }: ChatViewProps) {
       // Swap the -1 placeholder for the persisted chat: drop the placeholder,
       // select the real one, and keep using it for the rest of this send.
       removeChat(newChat.connectionId, -1)
+      let existingSelectedModel: Model | null = selectedModel;
+      let existingReasoning: ReasoningOption = reasoning;
+      let existingFast: boolean = fast;
+      removeSelectedModel(-1);
+      removeReasoning(-1);
+      removeFast(-1);
+      setSelectedModel(newChat.id, existingSelectedModel);
+      setReasoning(newChat.id, existingReasoning);
+      setFast(newChat.id, existingFast);
       openChat(newChat.id)
       await handleAgentConnect(newChat)
       chat = newChat
@@ -233,7 +254,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
       if (selectedModel?.provider === 'cursor') {
         await window.agentApi.applyModel(chat.id, {
           modelId: selectedModel.id,
-          reasoning: reasoningValue || undefined,
+          reasoning: reasoning || undefined,
           fast: selectedModel.hasFast && fast,
         })
       }
@@ -385,8 +406,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
               </SelectContent>
             </Select>
             <Select
-              value={reasoningValue || undefined}
-              onValueChange={setReasoning}
+              value={reasoning || undefined}
+              onValueChange={(value) => setReasoning(chatId, value as ReasoningOption)}
               disabled={!selectedModel || selectedModel.reasoningOptions.length === 0}
             >
               <SelectTrigger size="sm" className="w-32">
@@ -402,7 +423,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
             </Select>
             {selectedModel?.hasFast ? (
               <div className="flex items-center gap-2">
-                <Switch id="model-fast" checked={fast} onCheckedChange={setFast} />
+                <Switch id="model-fast" checked={fast} onCheckedChange={(checked) => setFast(chatId, checked)} />
                 <Label htmlFor="model-fast">Fast</Label>
               </div>
             ) : null}

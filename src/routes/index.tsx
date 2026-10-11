@@ -24,7 +24,7 @@ import type Chat from '@/interfaces/Chat'
 import type Connection from '@/interfaces/Connection'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import useChatStore from '@/stores/chatStore'
-import useIndexStore from '@/stores/indexStore'
+import useGlobalStore from '@/stores/globalStore'
 import mssqlLogo from '@/assets/microsoft-sql-server.svg'
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import DeleteConnectionDialog from '@/components/index/DeleteConnectionDialog'
@@ -64,11 +64,11 @@ function Index() {
   const addChat = useChatStore((state) => state.addChat)
   const renameChat = useChatStore((state) => state.renameChat)
   const removeChat = useChatStore((state) => state.removeChat)
-  const openChatId = useIndexStore((state) => state.openChatId)
-  const openChat = useIndexStore((state) => state.openChat)
-  const closeChat = useIndexStore((state) => state.closeChat)
-  const openByConnectionId = useIndexStore((state) => state.openByConnectionId)
-  const setConnectionOpen = useIndexStore((state) => state.setConnectionOpen)
+  const openChatId = useGlobalStore((state) => state.openChatId)
+  const openChat = useGlobalStore((state) => state.openChat)
+  const closeChat = useGlobalStore((state) => state.closeChat)
+  const openByConnectionId = useGlobalStore((state) => state.openByConnectionId)
+  const setConnectionOpen = useGlobalStore((state) => state.setConnectionOpen)
   const [isConnectionDialogOpen, setIsConnectionDialogOpen] = useState(false)
   const [connectionPendingDelete, setConnectionPendingDelete] = useState<Connection | null>(null)
   const [isDeletingConnection, setIsDeletingConnection] = useState(false)
@@ -177,7 +177,7 @@ function Index() {
     try {
       await window.chatsApi.deleteChat(chatPendingDelete.id)
       removeChat(chatPendingDelete.connectionId, chatPendingDelete.id)
-      if (chatPendingDelete.id === useIndexStore.getState().openChatId) {
+      if (chatPendingDelete.id === useGlobalStore.getState().openChatId) {
         closeChat()
       }
       setChatPendingDelete(null)

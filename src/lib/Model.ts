@@ -10,12 +10,10 @@ export const REASONING_OPTIONS = [
 ] as const
 
 export type ReasoningOption = typeof REASONING_OPTIONS[number]
-
-export type AcpModelId = string & { readonly __brand: 'AcpModelId' }
-
 export default interface Model {
+  provider: 'cursor' | 'opencode'
   readonly name: string
-  readonly id: AcpModelId
+  readonly id: string
   readonly reasoningOptions: readonly ReasoningOption[]
   readonly hasFast: boolean
 }

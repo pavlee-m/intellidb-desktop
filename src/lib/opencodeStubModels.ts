@@ -1,12 +1,6 @@
-export interface AvailableModel {
-  provider: 'cursor' | 'opencode'
-  id: string
-  name: string
-  reasoningOptions: readonly string[]
-  hasFast: boolean
-}
+import Model from "./Model"
 
-export const OPENCODE_STUB_MODELS: AvailableModel[] = [
+export const OPENCODE_STUB_MODELS: Model[] = [
   {
     provider: 'opencode',
     id: 'opencode-big-stub',

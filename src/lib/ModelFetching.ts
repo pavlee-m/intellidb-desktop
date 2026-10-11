@@ -5,7 +5,6 @@ import {
   type CursorCliCommand,
 } from '@/lib/cursorCliCommand'
 import Model, {
-  type AcpModelId,
   REASONING_OPTIONS,
   type ReasoningOption,
 } from '@/lib/Model'
@@ -151,8 +150,9 @@ function groupVariants(rows: VariantRow[]): Model[] {
   const models: Model[] = []
   for (const [familyId, family] of families) {
     models.push({
+      provider: 'cursor',
       name: pickDisplayName(family.names),
-      id: (CLI_FAMILY_TO_ACP_BASE_ID[familyId] ?? familyId) as AcpModelId,
+      id: (CLI_FAMILY_TO_ACP_BASE_ID[familyId] ?? familyId),
       reasoningOptions: REASONING_OPTIONS.filter((option) =>
         family.efforts.has(option),
       ),
