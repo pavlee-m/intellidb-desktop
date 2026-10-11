@@ -251,6 +251,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
       setFast(newChat.id, existingFast);
       openChat(newChat.id)
       await handleAgentConnect(newChat)
+      // Update the name in the database
+      await window.chatsApi.renameChat(newChat.id, text)
+      newChat.name = text;
       chat = { ...newChat, dangerousQueries: chat.dangerousQueries ?? false }
     }
     if (!chat) return
