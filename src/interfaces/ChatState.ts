@@ -9,4 +9,5 @@ export default interface ChatState {
   removeChat: (connectionId: number, chatId: number) => void
   setSessionId: (connectionId: number, chatId: number, sessionId: string) => void
   setProvider: (connectionId: number, chatId: number, provider: string) => void
+  setDangerousQueries: (connectionId: number, chatId: number, dangerousQueries: boolean) => void
 }
