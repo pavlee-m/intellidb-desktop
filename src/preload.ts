@@ -4,7 +4,7 @@ import Chat from '@/interfaces/Chat'
 import Connection from '@/interfaces/Connection'
 import BackendConnection from './interfaces/BackendConnection'
 import type ChatActivity from '@/interfaces/ChatActivity'
-import type Model from '@/lib/Model'
+import type Model from '@/interfaces/Model'
 
 contextBridge.exposeInMainWorld('settingsApi', {
   getSettings: () => ipcRenderer.invoke('settings:get') as Promise<Settings>,

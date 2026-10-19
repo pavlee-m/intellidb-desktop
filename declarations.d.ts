@@ -3,7 +3,7 @@ type Settings = import('./src/interfaces/Settings').default;
 type Connection = import('./src/interfaces/Connection').default;
 type Chat = import('./src/interfaces/Chat').default;
 type ChatActivity = import('./src/interfaces/ChatActivity').default;
-type Model = import('./src/lib/Model').default;
+type Model = import('./src/interfaces/Model').default;
 
 declare global {
   interface Window {

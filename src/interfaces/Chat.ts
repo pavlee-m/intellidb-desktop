@@ -5,5 +5,5 @@ export default interface Chat {
   createdAt: string;
   sessionId: string | null;
   provider: string;
-  dangerousQueries: boolean;
+  modeId: string;
 }

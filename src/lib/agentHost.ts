@@ -160,6 +160,14 @@ export async function applyModelChoice(
   await agent.client.applyModelChoice(choice);
 }
 
+export async function setMode(chatId: number, mode: string): Promise<void> {
+  const agent = agents.get(chatId);
+  if (!agent?.client) {
+    throw new Error('Agent is not connected');
+  }
+  await agent.client.setMode(mode);
+}
+
 export async function cancelRequest(chatId: number): Promise<void> {
   const agent = agents.get(chatId);
   if (!agent) {

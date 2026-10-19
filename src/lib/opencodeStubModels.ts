@@ -1,4 +1,4 @@
-import Model from "./Model"
+import Model from "../interfaces/Model"
 
 export const OPENCODE_STUB_MODELS: Model[] = [
   {

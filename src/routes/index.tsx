@@ -148,7 +148,6 @@ function Index() {
         createdAt: '',
         sessionId: '',
         provider: '',
-        dangerousQueries: false,
       });
     }
     openChat(-1)

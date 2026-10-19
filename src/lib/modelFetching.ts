@@ -7,7 +7,7 @@ import {
 import Model, {
   REASONING_OPTIONS,
   type ReasoningOption,
-} from '@/lib/Model'
+} from '@/interfaces/Model'
 
 const execFileAsync = promisify(execFile)
 

@@ -4,9 +4,11 @@ import GlobalState from '@/interfaces/GlobalState'
 const useGlobalStore = create<GlobalState>((set, get) => ({
   openChatId: null,
   openByConnectionId: {},
+  selectedModeId: {},
   selectedModel: {},
   reasoning: {},
   fast: {},
+  dangerousQueries: {},
 
   openChat: (chatId) => set({ openChatId: chatId }),
 
@@ -32,6 +34,11 @@ const useGlobalStore = create<GlobalState>((set, get) => ({
       fast: { ...state.fast, [chatId]: fast },
     })),
 
+  setDangerousQueries: (chatId, dangerousQueries) =>
+    set((state) => ({
+      dangerousQueries: { ...state.dangerousQueries, [chatId]: dangerousQueries },
+    })),
+
   removeSelectedModel: (chatId) =>
     set((state) => {
       const { [chatId]: _, ...selectedModel } = state.selectedModel
@@ -48,6 +55,12 @@ const useGlobalStore = create<GlobalState>((set, get) => ({
     set((state) => {
       const { [chatId]: _, ...fast } = state.fast
       return { fast }
+    }),
+
+  removeDangerousQueries: (chatId) =>
+    set((state) => {
+      const { [chatId]: _, ...dangerousQueries } = state.dangerousQueries
+      return { dangerousQueries }
     }),
 }))
 

@@ -30,7 +30,7 @@ import { Spinner } from '@/components/ui/spinner'
 import {
   OPENCODE_STUB_MODELS,
 } from '@/lib/opencodeStubModels'
-import Model, { ReasoningOption } from '@/lib/Model'
+import Model, { ReasoningOption } from '@/interfaces/Model'
 import useSettingsStore from '@/stores/settingsStore'
 
 function choiceKey(model: Model): string {
@@ -100,12 +100,14 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const selectedModel = useGlobalStore((state) => state.selectedModel[chatId])
   const reasoning = useGlobalStore((state) => state.reasoning[chatId])
   const fast = useGlobalStore((state) => state.fast[chatId])
+  const dangerousQueries = useGlobalStore((state) => state.dangerousQueries[chatId])
   const setSelectedModel = useGlobalStore((state) => state.setSelectedModel)
   const setReasoning = useGlobalStore((state) => state.setReasoning)
   const setFast = useGlobalStore((state) => state.setFast)
   const removeSelectedModel = useGlobalStore((state) => state.removeSelectedModel)
   const removeReasoning = useGlobalStore((state) => state.removeReasoning)
   const removeFast = useGlobalStore((state) => state.removeFast)
+  const removeDangerousQueries = useGlobalStore((state) => state.removeDangerousQueries)
   const settings = useSettingsStore((state) => state.settings)
   const setSettings = useSettingsStore((state) => state.setSettings)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -113,7 +115,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const removeChat = useChatStore((state) => state.removeChat)
   const setSessionId = useChatStore((state) => state.setSessionId)
   const setProvider = useChatStore((state) => state.setProvider)
-  const setDangerousQueries = useChatStore((state) => state.setDangerousQueries)
+  const setDangerousQueries = useGlobalStore((state) => state.setDangerousQueries)
   const setConnectionOpen = useGlobalStore((state) => state.setConnectionOpen)
   const openChat = useGlobalStore((state) => state.openChat)
   const backendConnections = useBackendConnectionStore((state) => state.backendConnections)
@@ -237,24 +239,24 @@ export default function ChatView({ chatId }: ChatViewProps) {
       // Swap the -1 placeholder for the persisted chat: drop the placeholder,
       // select the real one, and keep using it for the rest of this send.
       removeChat(newChat.connectionId, -1)
-      if (chat.dangerousQueries) {
-        setDangerousQueries(newChat.connectionId, newChat.id, true)
-      }
       let existingSelectedModel: Model | null = selectedModel;
       let existingReasoning: ReasoningOption = reasoning;
       let existingFast: boolean = fast;
+      const existingDangerousQueries = dangerousQueries ?? false;
       removeSelectedModel(-1);
       removeReasoning(-1);
       removeFast(-1);
+      removeDangerousQueries(-1);
       setSelectedModel(newChat.id, existingSelectedModel);
       setReasoning(newChat.id, existingReasoning);
       setFast(newChat.id, existingFast);
+      setDangerousQueries(newChat.id, existingDangerousQueries);
       openChat(newChat.id)
       await handleAgentConnect(newChat)
       // Update the name in the database
       await window.chatsApi.renameChat(newChat.id, text)
       newChat.name = text;
-      chat = { ...newChat, dangerousQueries: chat.dangerousQueries ?? false }
+      chat = newChat;
     }
     if (!chat) return
 
@@ -273,8 +275,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
           fast: selectedModel.hasFast && fast,
         })
       }
-      const dangerousQueries = chat.dangerousQueries ?? false
-      let agentQuery = `dangerousQueries: ${dangerousQueries}\nconnectionId: ${backendConnectionId ?? 'unknown'}\n${text}`;
+      let agentQuery = `dangerousQueries: ${dangerousQueries ?? false}\nconnectionId: ${backendConnectionId ?? 'unknown'}\n${text}`;
       await window.agentApi.prompt(chat.id, agentQuery)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
@@ -447,12 +448,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
             <div className="flex items-center gap-2">
               <Switch
                 id="dangerous-queries"
-                checked={currentChat?.dangerousQueries ?? false}
-                onCheckedChange={(checked) => {
-                  if (currentChat) {
-                    setDangerousQueries(currentChat.connectionId, chatId, checked)
-                  }
-                }}
+                checked={dangerousQueries ?? false}
+                onCheckedChange={(checked) => setDangerousQueries(chatId, checked)}
               />
               <Label htmlFor="dangerous-queries">Dangerous queries</Label>
             </div>

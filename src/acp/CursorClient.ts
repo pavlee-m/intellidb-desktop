@@ -135,6 +135,15 @@ export class CursorClient implements ProviderClient {
         });
     }
 
+
+    async setMode(modeId: string): Promise<void> {
+        await this.connection.agent.request(acp.methods.agent.session.setMode, {
+            sessionId: this.sessionId,
+            modeId,
+        });
+    }
+
+    
     dispose(): void {
         this.agentProcess.kill();
     }
