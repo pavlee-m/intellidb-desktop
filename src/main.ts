@@ -13,6 +13,7 @@ import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
 import { ensureAgent, promptAgent, applyModelChoice, setAgentSessionPersister, setCursorCliCommandProvider, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest } from './lib/agentHost';
 import { fetchCursorModels } from './lib/modelFetching';
+import { checkCliCommand } from './lib/cliCommandCheck';
 import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND } from './lib/cursorCliCommand';
 import { encryptSecret, decryptSecret } from './lib/encryptedStorage';
 import { getAvailableKeyringBackend } from './lib/linuxKeyringBackend';
@@ -322,6 +323,10 @@ app.on('ready', async () => {
     ipcMain.handle('settings:get', async () => {
       return settings;
     });
+
+    ipcMain.handle('cli:checkCommand', (_event, command: string) =>
+      checkCliCommand(typeof command === 'string' ? command : ''),
+    );
 
     ipcMain.handle('connections:get', async () => {
       return connections;

@@ -4,12 +4,14 @@ type Connection = import('./src/interfaces/Connection').default;
 type Chat = import('./src/interfaces/Chat').default;
 type ChatActivity = import('./src/interfaces/ChatActivity').default;
 type Model = import('./src/interfaces/Model').default;
+type CliCommandCheckResult = import('./src/lib/cliCommand').CliCommandCheckResult;
 
 declare global {
   interface Window {
     settingsApi: {
       getSettings: () => Promise<Settings>;
       updateSetting: (key: string, value: string) => Promise<Settings>;
+      checkCliCommand: (command: string) => Promise<CliCommandCheckResult>;
     };
     connectionsApi: {
       getConnections: () => Promise<BackendConnection[]>;
