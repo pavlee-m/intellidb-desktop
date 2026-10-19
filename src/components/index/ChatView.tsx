@@ -30,6 +30,7 @@ import { Spinner } from '@/components/ui/spinner'
 import {
   OPENCODE_STUB_MODELS,
 } from '@/lib/opencodeStubModels'
+import { getProviderCliCommand } from '@/lib/cliCommand'
 import Model, { ReasoningOption } from '@/interfaces/Model'
 import useSettingsStore from '@/stores/settingsStore'
 
@@ -111,6 +112,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const settings = useSettingsStore((state) => state.settings)
   const setSettings = useSettingsStore((state) => state.setSettings)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const sendInFlightRef = useRef(false)
   const addChat = useChatStore((state) => state.addChat)
   const removeChat = useChatStore((state) => state.removeChat)
   const setSessionId = useChatStore((state) => state.setSessionId)
@@ -224,63 +226,87 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }
 
   const handleSend = async () => {
-    if (!isConnectionOnline) return
-    const text = input.trim()
-    if (!text || isSending) return
-    if (selectedModel?.provider === 'opencode') {
-      toast.error('OpenCode is not connected yet')
-      return
-    }
-
-    let chat = currentChat
-    if (chat && chat.id === -1) {
-      const newChat = await createChat(chat.connectionId)
-      if (!newChat) return
-      // Swap the -1 placeholder for the persisted chat: drop the placeholder,
-      // select the real one, and keep using it for the rest of this send.
-      removeChat(newChat.connectionId, -1)
-      let existingSelectedModel: Model | null = selectedModel;
-      let existingReasoning: ReasoningOption = reasoning;
-      let existingFast: boolean = fast;
-      const existingDangerousQueries = dangerousQueries ?? false;
-      removeSelectedModel(-1);
-      removeReasoning(-1);
-      removeFast(-1);
-      removeDangerousQueries(-1);
-      setSelectedModel(newChat.id, existingSelectedModel);
-      setReasoning(newChat.id, existingReasoning);
-      setFast(newChat.id, existingFast);
-      setDangerousQueries(newChat.id, existingDangerousQueries);
-      openChat(newChat.id)
-      await handleAgentConnect(newChat)
-      // Update the name in the database
-      await window.chatsApi.renameChat(newChat.id, text)
-      newChat.name = text;
-      chat = newChat;
-    }
-    if (!chat) return
-
-    setIsSending(true)
-    setInput('')
-    pushUserMessage(chat.id, text)
+    if (sendInFlightRef.current) return
+    sendInFlightRef.current = true
     try {
-      if (selectedModel && !chat.provider) {
-        await window.chatsApi.setProvider(chat.id, selectedModel.provider)
-        setProvider(chat.connectionId, chat.id, selectedModel.provider)
+      if (!isConnectionOnline) return
+      const text = input.trim()
+      if (!text || isSending) return
+      if (currentChat && currentChat.id === -1) {
+        if (!selectedModel) {
+          toast.error('Select a model before sending')
+          return
+        }
+        const loadedSettings = settings ?? await window.settingsApi.getSettings()
+        const command = getProviderCliCommand(selectedModel.provider, loadedSettings)
+        try {
+          const check = await window.settingsApi.checkCliCommand(command)
+          if (check.ok === false) {
+            toast.error(check.message)
+            return
+          }
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : String(error))
+          return
+        }
       }
-      if (selectedModel?.provider === 'cursor') {
-        await window.agentApi.applyModel(chat.id, {
-          modelId: selectedModel.id,
-          reasoning: reasoning || undefined,
-          fast: selectedModel.hasFast && fast,
-        })
+      if (selectedModel?.provider === 'opencode') {
+        toast.error('OpenCode is not connected yet')
+        return
       }
-      let agentQuery = `dangerousQueries: ${dangerousQueries ?? false}\nconnectionId: ${backendConnectionId ?? 'unknown'}\n${text}`;
-      await window.agentApi.prompt(chat.id, agentQuery)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+
+      let chat = currentChat
+      if (chat && chat.id === -1) {
+        const newChat = await createChat(chat.connectionId)
+        if (!newChat) return
+        // Swap the -1 placeholder for the persisted chat: drop the placeholder,
+        // select the real one, and keep using it for the rest of this send.
+        removeChat(newChat.connectionId, -1)
+        let existingSelectedModel: Model | null = selectedModel;
+        let existingReasoning: ReasoningOption = reasoning;
+        let existingFast: boolean = fast;
+        const existingDangerousQueries = dangerousQueries ?? false;
+        removeSelectedModel(-1);
+        removeReasoning(-1);
+        removeFast(-1);
+        removeDangerousQueries(-1);
+        setSelectedModel(newChat.id, existingSelectedModel);
+        setReasoning(newChat.id, existingReasoning);
+        setFast(newChat.id, existingFast);
+        setDangerousQueries(newChat.id, existingDangerousQueries);
+        openChat(newChat.id)
+        await handleAgentConnect(newChat)
+        // Update the name in the database
+        await window.chatsApi.renameChat(newChat.id, text)
+        newChat.name = text;
+        chat = newChat;
+      }
+      if (!chat) return
+
+      setIsSending(true)
+      setInput('')
+      pushUserMessage(chat.id, text)
+      try {
+        if (selectedModel && !chat.provider) {
+          await window.chatsApi.setProvider(chat.id, selectedModel.provider)
+          setProvider(chat.connectionId, chat.id, selectedModel.provider)
+        }
+        if (selectedModel?.provider === 'cursor') {
+          await window.agentApi.applyModel(chat.id, {
+            modelId: selectedModel.id,
+            reasoning: reasoning || undefined,
+            fast: selectedModel.hasFast && fast,
+          })
+        }
+        let agentQuery = `dangerousQueries: ${dangerousQueries ?? false}\nconnectionId: ${backendConnectionId ?? 'unknown'}\n${text}`;
+        await window.agentApi.prompt(chat.id, agentQuery)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error))
+      } finally {
+        setIsSending(false)
+      }
     } finally {
-      setIsSending(false)
+      sendInFlightRef.current = false
     }
   }
 
