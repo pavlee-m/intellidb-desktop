@@ -3,6 +3,7 @@ import ACPClientHandlers from '@/interfaces/ACPClientHandlers';
 import ProviderClient from '@/interfaces/ProviderClient';
 import { CursorClient } from '@/acp/CursorClient';
 import type { CursorCliCommand } from '@/lib/cursorCliCommand';
+import { checkCliCommand } from '@/lib/cliCommandCheck';
 import type * as acp from '@agentclientprotocol/sdk';
 
 const agents = new Map<number, { client: ProviderClient | undefined; ready: boolean }>();
@@ -103,7 +104,7 @@ async function startAgent(
     sessionId: string | undefined,
     onActivity: (entry: ChatActivity) => void,
     command: CursorCliCommand,
-): Promise<{ client: ProviderClient | undefined; ready: boolean }> {
+): Promise<{ client: ProviderClient; ready: boolean }> {
     agents.set(chatId, { client: undefined, ready: false });
     const client = new CursorClient(createHandlers(onActivity), command, sessionId, agentMcpServers);
     try{
@@ -112,7 +113,8 @@ async function startAgent(
     catch (error) {
       console.error('Agent connect failed for chat', chatId, error);
       client.dispose();
-      return { client: undefined, ready: false };
+      agents.delete(chatId);
+      throw new Error(error instanceof Error ? error.message : String(error));
     }
     if (persistSessionId) {
         await persistSessionId(chatId, client.getSessionId());
@@ -126,9 +128,12 @@ export async function ensureAgent(
     onActivity: (entry: ChatActivity) => void,
 ): Promise<string> {
     const existing = agents.get(chatId);
-    if (existing) {
+    if (existing?.client) {
       console.log("Existing agent found, returning session ID");
-        return existing.client?.getSessionId() ?? '';
+      return existing.client.getSessionId();
+    }
+    if (existing) {
+      agents.delete(chatId);
     }
 
     if (!cursorCliCommandProvider) {
@@ -136,17 +141,32 @@ export async function ensureAgent(
     }
     const command = await cursorCliCommandProvider();
 
-    const storedId = sessionId && sessionId.length > 0 ? sessionId : undefined;
-    let client: ProviderClient | undefined;
-    let ready: boolean;
-    ({ client, ready } = await startAgent(chatId, storedId, onActivity, command));
-    if (!client) {
-      console.log("Failed to connect to existing agent, creating a new agent");
-      ({ client, ready } = await startAgent(chatId, undefined, onActivity, command));
+    const availability = await checkCliCommand(command);
+    if (availability.ok === false) {
+      throw new Error(`Cursor CLI is unavailable: ${availability.message}`);
     }
-    // A stored id can be stale; fall back to a fresh session.
-    agents.set(chatId, { client, ready });
-    return client?.getSessionId() ?? '';
+
+    const storedId = sessionId && sessionId.length > 0 ? sessionId : undefined;
+    try {
+      const started = await startAgent(chatId, storedId, onActivity, command);
+      agents.set(chatId, started);
+      return started.client.getSessionId();
+    } catch (error) {
+      if (!storedId) {
+        agents.delete(chatId);
+        throw error;
+      }
+      // A stored id can be stale; fall back to a fresh session.
+      console.log("Failed to connect to existing agent, creating a new agent");
+      try {
+        const started = await startAgent(chatId, undefined, onActivity, command);
+        agents.set(chatId, started);
+        return started.client.getSessionId();
+      } catch (retryError) {
+        agents.delete(chatId);
+        throw retryError;
+      }
+    }
 }
 
 export async function applyModelChoice(
