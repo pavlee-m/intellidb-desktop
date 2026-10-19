@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, dialog } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -15,13 +15,24 @@ import { ensureAgent, promptAgent, applyModelChoice, setAgentSessionPersister, s
 import { fetchCursorModels } from './lib/ModelFetching';
 import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND } from './lib/cursorCliCommand';
 import { encryptSecret, decryptSecret } from './lib/encryptedStorage';
+import { getAvailableKeyringBackend } from './lib/linuxKeyringBackend';
 
-// On Linux, Chromium auto-detects the keyring backend from the desktop
-// environment. Non-GNOME/KDE sessions (e.g. Hyprland) are not recognized,
-// which silently falls back to "basic_text" (non-encrypted) storage.
-// Explicitly select the libsecret/gnome-keyring backend instead.
+// On Linux, Chromium auto-detects the keyring backend only in GNOME/KDE
+// sessions. Other environments (e.g. Hyprland) silently fall back to
+// "basic_text" (non-encrypted) storage. Probe the session bus and pass
+// the matching backend to Chromium instead.
 if (process.platform === 'linux') {
-  app.commandLine.appendSwitch('password-store', 'gnome-libsecret');
+  const backend = getAvailableKeyringBackend();
+  if (backend === null) {
+    dialog.showErrorBox(
+      'No keyring backend found',
+      'No supported keyring backend (gnome-keyring or KWallet) was found on this system. Connection credentials cannot be stored securely, so the application cannot start.',
+    );
+    // app.exit skips the before-quit handler, which assumes initDatabase has run.
+    app.exit(1);
+  } else {
+    app.commandLine.appendSwitch('password-store', backend);
+  }
 }
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
