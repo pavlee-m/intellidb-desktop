@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useEffect, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Input } from '@/components/ui/input'
 import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND } from '@/lib/cursorCliCommand'
 import useSettingsStore from '@/stores/settingsStore';
@@ -9,6 +9,47 @@ import cursorLogo from '@/assets/cursor.svg';
 export const Route = createFileRoute('/settings/integrations')({
   component: IntegrationsPage,
 })
+
+const CLI_CHECK_DEBOUNCE_MS = 400
+
+function useCliCommandValidation(rawValue: string, enabled: boolean): string | null {
+  const [error, setError] = useState<string | null>(null)
+  const seqRef = useRef(0)
+
+  useEffect(() => {
+    const trimmed = rawValue.trim()
+    // Bump in the effect body so an edit-to-effect stale window cannot apply.
+    const seq = ++seqRef.current
+
+    if (!enabled || trimmed.length === 0) {
+      setError(null)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      void window.settingsApi.checkCliCommand(trimmed)
+        .then((result) => {
+          if (seqRef.current !== seq) {
+            return
+          }
+          setError(result.ok === false ? result.message : null)
+        })
+        .catch((reason) => {
+          if (seqRef.current !== seq) {
+            return
+          }
+          const detail = reason instanceof Error ? reason.message : String(reason)
+          setError(`Unable to validate command: ${detail}`)
+        })
+    }, CLI_CHECK_DEBOUNCE_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [rawValue, enabled])
+
+  return error
+}
 
 function IntegrationsPage() {
   const settings = useSettingsStore((state) => state.settings)
@@ -26,6 +67,11 @@ function IntegrationsPage() {
       setCursorCliBinaryPath(loadedSettings.cursor_cli_binary)
     })
   }, [])
+
+  const opencodeEnabled = Boolean(settings?.opencode_integration_enabled)
+  const cursorCliEnabled = Boolean(settings?.cursor_cli_integration_enabled)
+  const opencodeError = useCliCommandValidation(opencodeBinaryPath, opencodeEnabled)
+  const cursorCliError = useCliCommandValidation(cursorCliBinaryPath, cursorCliEnabled)
 
   const handleOpencodeEnabledChange = (event: ChangeEvent<HTMLInputElement>) => {
     const nextValue = event.target.checked
@@ -97,6 +143,12 @@ function IntegrationsPage() {
             Opencode binary
           </label>
           <Input
+            aria-describedby={
+              opencodeError
+                ? 'opencode-binary-hint opencode-binary-error'
+                : 'opencode-binary-hint'
+            }
+            aria-invalid={Boolean(opencodeError)}
             disabled={!settings?.opencode_integration_enabled}
             id="opencode-binary"
             onBlur={handleOpencodeBinaryBlur}
@@ -105,9 +157,14 @@ function IntegrationsPage() {
             spellCheck={false}
             value={opencodeBinaryPath}
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground" id="opencode-binary-hint">
             Example: <code>opencode</code> or an absolute path like <code>/usr/local/bin/opencode</code>.
           </p>
+          {opencodeError ? (
+            <p className="mt-2 text-sm text-destructive" id="opencode-binary-error" role="alert">
+              {opencodeError}
+            </p>
+          ) : null}
         </div>
       </section>
 
@@ -139,6 +196,12 @@ function IntegrationsPage() {
             Cursor CLI binary
           </label>
           <Input
+            aria-describedby={
+              cursorCliError
+                ? 'cursor-cli-binary-hint cursor-cli-binary-error'
+                : 'cursor-cli-binary-hint'
+            }
+            aria-invalid={Boolean(cursorCliError)}
             disabled={!settings?.cursor_cli_integration_enabled}
             id="cursor-cli-binary"
             onBlur={handleCursorCliBinaryBlur}
@@ -147,10 +210,15 @@ function IntegrationsPage() {
             spellCheck={false}
             value={cursorCliBinaryPath}
           />
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground" id="cursor-cli-binary-hint">
             Example: <code>cursor-agent</code>, <code>agent</code>, or an absolute path like{' '}
             <code>/usr/local/bin/cursor-agent</code>.
           </p>
+          {cursorCliError ? (
+            <p className="mt-2 text-sm text-destructive" id="cursor-cli-binary-error" role="alert">
+              {cursorCliError}
+            </p>
+          ) : null}
         </div>
       </section>
     </div>
