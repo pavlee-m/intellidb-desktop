@@ -35,6 +35,8 @@ import RenameChatDialog from '@/components/index/RenameChatDialog'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { toast } from 'sonner'
 import useChatActivityStore from '@/stores/chatActivityStore'
+import useSettingsStore from '@/stores/settingsStore'
+import { getProviderCliCommand } from '@/lib/cliCommand'
 import ChatView from '@/components/index/ChatView'
 import { Spinner } from '@/components/ui/spinner'
 
@@ -77,6 +79,7 @@ function Index() {
   const [chatPendingDelete, setChatPendingDelete] = useState<Chat | null>(null)
   const [isDeletingChat, setIsDeletingChat] = useState(false)
   const applyAgentUpdate = useChatActivityStore((state) => state.applyAgentUpdate)
+  const settings = useSettingsStore((state) => state.settings)
 
   useEffect(() => window.agentApi.onActivity((chatId, entry) => applyAgentUpdate(chatId, entry)), [])
 
@@ -232,8 +235,26 @@ function Index() {
     })
   }
 
-  const handleChatSelect = (chat: Chat) => {
+  const handleChatSelect = async (chat: Chat) => {
     console.log('handleChatSelect', chat.id)
+    // A chat that already has a provider can only resume with its CLI
+    // executable present, so verify it before loading the chat. Chats
+    // without a provider have no command to check yet; their send path
+    // and the agent gate still validate.
+    if (chat.id !== -1 && (chat.provider === 'cursor' || chat.provider === 'opencode')) {
+      const loadedSettings = settings ?? await window.settingsApi.getSettings()
+      const command = getProviderCliCommand(chat.provider, loadedSettings)
+      try {
+        const check = await window.settingsApi.checkCliCommand(command)
+        if (check.ok === false) {
+          toast.error(check.message)
+          return
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error))
+        return
+      }
+    }
     openChat(chat.id);
     if (chatsByConnection[chat.connectionId]?.find((chat) => chat.id === -1) && chat.id !== -1) {
       removeChat(chat.connectionId, -1);
