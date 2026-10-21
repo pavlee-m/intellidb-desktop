@@ -1,13 +1,13 @@
 import { create } from 'zustand'
-import CursorModelsState from '@/interfaces/CursorModelState'
+import ModelsState from '@/interfaces/ModelsState'
 
 
 // Lives outside the component tree so the model list survives navigation
 // (e.g. Settings round-trips) without re-paying the listCursor() IPC on
 // every remount of ChatView. The list is still refreshed in the background.
-const useCursorModelsStore = create<CursorModelsState>((set) => ({
+const useModelsStore = create<ModelsState>((set) => ({
   models: [],
   setModels: (models) => set({ models }),
 }))
 
-export default useCursorModelsStore
+export default useModelsStore

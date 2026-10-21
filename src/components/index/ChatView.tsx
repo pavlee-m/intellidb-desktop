@@ -28,7 +28,7 @@ import { ChatProperties } from '@/interfaces/ChatProperties'
 import useChatStore from '@/stores/chatStore'
 import useGlobalStore from '@/stores/globalStore'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
-import useCursorModelsStore from '@/stores/cursorModelsStore'
+import useCursorModelsStore from '@/stores/modelsStore'
 import { Spinner } from '@/components/ui/spinner'
 import {
   OPENCODE_STUB_MODELS,
