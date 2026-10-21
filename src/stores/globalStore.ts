@@ -1,67 +1,31 @@
 import { create } from 'zustand'
 import GlobalState from '@/interfaces/GlobalState'
+import { ChatProperties } from '@/interfaces/ChatProperties'
 
 const useGlobalStore = create<GlobalState>((set, get) => ({
   openChatId: null,
   openByConnectionId: {},
-  selectedModeId: {},
-  selectedModel: {},
-  reasoning: {},
-  fast: {},
-  dangerousQueries: {},
+  chatProperties: {},
 
   openChat: (chatId) => set({ openChatId: chatId }),
 
   closeChat: () => set({ openChatId: null }),
 
-  setConnectionOpen: (connectionId, open) =>
-    set((state) => ({
-      openByConnectionId: { ...state.openByConnectionId, [connectionId]: open },
-    })),
+  setChatProperties: (chatId: number, chatProperties: ChatProperties) => set({ chatProperties: { ...get().chatProperties, [chatId]: chatProperties } }),
 
-  setSelectedModel: (chatId, model) =>
-    set((state) => ({
-      selectedModel: { ...state.selectedModel, [chatId]: model },
-    })),
+  // Atomically patch one chat's properties; a no-op if not initialized yet.
+  updateChatProperties: (chatId: number, patch: Partial<ChatProperties>) => set((state) => {
+    const existing = state.chatProperties[chatId]
+    if (!existing) return state
+    return { chatProperties: { ...state.chatProperties, [chatId]: { ...existing, ...patch } } }
+  }),
 
-  setReasoning: (chatId, reasoning) =>
-    set((state) => ({
-      reasoning: { ...state.reasoning, [chatId]: reasoning },
-    })),
+  setConnectionOpen: (connectionId: number, open: boolean) => set({ openByConnectionId: { ...get().openByConnectionId, [connectionId]: open } }),
 
-  setFast: (chatId, fast) =>
-    set((state) => ({
-      fast: { ...state.fast, [chatId]: fast },
-    })),
-
-  setDangerousQueries: (chatId, dangerousQueries) =>
-    set((state) => ({
-      dangerousQueries: { ...state.dangerousQueries, [chatId]: dangerousQueries },
-    })),
-
-  removeSelectedModel: (chatId) =>
-    set((state) => {
-      const { [chatId]: _, ...selectedModel } = state.selectedModel
-      return { selectedModel }
-    }),
-
-  removeReasoning: (chatId) =>
-    set((state) => {
-      const { [chatId]: _, ...reasoning } = state.reasoning
-      return { reasoning }
-    }),
-
-  removeFast: (chatId) =>
-    set((state) => {
-      const { [chatId]: _, ...fast } = state.fast
-      return { fast }
-    }),
-
-  removeDangerousQueries: (chatId) =>
-    set((state) => {
-      const { [chatId]: _, ...dangerousQueries } = state.dangerousQueries
-      return { dangerousQueries }
-    }),
+  deleteChatProperties: (chatId: number) => set((state) => {
+    const { [chatId]: _removed, ...rest } = state.chatProperties
+    return { chatProperties: rest }
+  }),
 }))
 
 export default useGlobalStore

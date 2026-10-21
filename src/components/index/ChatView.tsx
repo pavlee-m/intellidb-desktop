@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Send, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type ChatActivity from '@/interfaces/ChatActivity'
@@ -23,9 +23,11 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import Chat from '@/interfaces/Chat'
+import { ChatProperties } from '@/interfaces/ChatProperties'
 import useChatStore from '@/stores/chatStore'
 import useGlobalStore from '@/stores/globalStore'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
+import useCursorModelsStore from '@/stores/cursorModelsStore'
 import { Spinner } from '@/components/ui/spinner'
 import {
   OPENCODE_STUB_MODELS,
@@ -97,28 +99,22 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const [waitForInitialActivity, setWaitForInitialActivity] = useState(chatId === -1 ? false: true)
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
-  const [cursorModels, setCursorModels] = useState<Model[]>([])
-  const selectedModel = useGlobalStore((state) => state.selectedModel[chatId])
-  const reasoning = useGlobalStore((state) => state.reasoning[chatId])
-  const fast = useGlobalStore((state) => state.fast[chatId])
-  const dangerousQueries = useGlobalStore((state) => state.dangerousQueries[chatId])
-  const setSelectedModel = useGlobalStore((state) => state.setSelectedModel)
-  const setReasoning = useGlobalStore((state) => state.setReasoning)
-  const setFast = useGlobalStore((state) => state.setFast)
-  const removeSelectedModel = useGlobalStore((state) => state.removeSelectedModel)
-  const removeReasoning = useGlobalStore((state) => state.removeReasoning)
-  const removeFast = useGlobalStore((state) => state.removeFast)
-  const removeDangerousQueries = useGlobalStore((state) => state.removeDangerousQueries)
+
+  const chatProperties = useGlobalStore((state) => state.chatProperties[chatId]);
+  const cursorModels = useCursorModelsStore((state) => state.models)
+  const setCursorModels = useCursorModelsStore((state) => state.setModels)
   const settings = useSettingsStore((state) => state.settings)
   const setSettings = useSettingsStore((state) => state.setSettings)
+  const setChatProperties = useGlobalStore((state) => state.setChatProperties)
+  const updateChatProperties = useGlobalStore((state) => state.updateChatProperties)
   const bottomRef = useRef<HTMLDivElement>(null)
   const sendInFlightRef = useRef(false)
   const addChat = useChatStore((state) => state.addChat)
   const removeChat = useChatStore((state) => state.removeChat)
   const setSessionId = useChatStore((state) => state.setSessionId)
   const setProvider = useChatStore((state) => state.setProvider)
-  const setDangerousQueries = useGlobalStore((state) => state.setDangerousQueries)
   const setConnectionOpen = useGlobalStore((state) => state.setConnectionOpen)
+  const deleteChatProperties = useGlobalStore((state) => state.deleteChatProperties)
   const openChat = useGlobalStore((state) => state.openChat)
   const backendConnections = useBackendConnectionStore((state) => state.backendConnections)
   const backendConnectionId = backendConnections.find(
@@ -132,14 +128,30 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const mode = isSending ? 'stop' : 'send'
   const isWaitingForActivity = waitForInitialActivity
 
-  const catalog: Model[] = [
-    ...(settings?.cursor_cli_integration_enabled ? cursorModels : []),
-    ...(settings?.opencode_integration_enabled ? OPENCODE_STUB_MODELS : []),
-  ]
   const lockedProvider = currentChat?.provider ?? ''
-  const visibleModels = lockedProvider
-    ? catalog.filter((model) => model.provider === lockedProvider)
-    : catalog
+  // Memoized so `visibleModels` stays referentially stable; otherwise the
+  // properties-init effect below would run after every render.
+  const visibleModels = useMemo(() => {
+    const catalog: Model[] = [
+      ...(settings?.cursor_cli_integration_enabled ? cursorModels : []),
+      ...(settings?.opencode_integration_enabled ? OPENCODE_STUB_MODELS : []),
+    ]
+    return lockedProvider
+      ? catalog.filter((model) => model.provider === lockedProvider)
+      : catalog
+  }, [settings, cursorModels, lockedProvider])
+
+
+  // Single source of truth for a freshly-selected model's defaults.
+   const createChatProperties = (model: Model): ChatProperties => {
+      return {
+          model,
+          reasoning: model.reasoningOptions[0],
+          fast: false,
+          dangerousQueries: false,
+      }
+  }
+
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
@@ -152,17 +164,15 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }, [chatId])
 
   useEffect(() => {
-    // Get model from store, if no set, set first model from visibleModels.
+    // Default to the first available model once one exists.
     // visibleModels can be empty while settings/models are still loading
     // (or if the locked provider has no models in the catalog), so only
     // default once there is actually a model available.
-    if (!selectedModel && visibleModels.length > 0) {
-      const model = visibleModels[0]
-      setSelectedModel(chatId, model)
-      setReasoning(chatId, model.reasoningOptions[0] ?? '')
-      setFast(chatId, false)
+    if (!chatProperties && visibleModels.length > 0) {
+      
+      setChatProperties(chatId, createChatProperties(visibleModels[0]))
     }
-  }, [chatId, selectedModel, visibleModels])
+  }, [chatId, chatProperties, visibleModels])
 
   useEffect(() => {
     // Having entries in mind here is important
@@ -171,13 +181,14 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }, [chatId])
 
   useEffect(() => {
-    console.log('Chat id', currentChat?.id)
-    if (currentChat && currentChat.id !== 1) {
+    if (currentChat && currentChat.id !== -1) {
       handleAgentConnect(currentChat);
     }
   }, [currentChat?.id, isConnectionOnline])
 
   useEffect(() => {
+    // Refresh the cached cursor model list. Reads are instant from the store,
+    // so this only keeps the cache up to date in the background.
     let cancelled = false
     void (async () => {
       const loaded = settings ?? await window.settingsApi.getSettings()
@@ -219,10 +230,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
 
   const handleModelChange = (nextKey: string) => {
     const next = visibleModels.find((model) => choiceKey(model) === nextKey)
-    if (!next) return;
-    setSelectedModel(chatId, next ?? visibleModels[0])
-    setReasoning(chatId, next?.reasoningOptions[0] ?? '')
-    setFast(chatId, false)
+    if (!next) return
+    // One atomic update: new model, its first reasoning option, fast reset.
+    updateChatProperties(chatId, { model: next, reasoning: next.reasoningOptions[0], fast: false })
   }
 
   const handleSend = async () => {
@@ -232,13 +242,17 @@ export default function ChatView({ chatId }: ChatViewProps) {
       if (!isConnectionOnline) return
       const text = input.trim()
       if (!text || isSending) return
+      // Snapshot the current properties: after openChat(newChat.id) below the
+      // component re-renders for the new chatId, but this closure keeps
+      // operating on the selection made for the placeholder chat.
+      const props = chatProperties
       if (currentChat && currentChat.id === -1) {
-        if (!selectedModel) {
+        if (!props?.model) {
           toast.error('Select a model before sending')
           return
         }
         const loadedSettings = settings ?? await window.settingsApi.getSettings()
-        const command = getProviderCliCommand(selectedModel.provider, loadedSettings)
+        const command = getProviderCliCommand(props.model.provider, loadedSettings)
         try {
           const check = await window.settingsApi.checkCliCommand(command)
           if (check.ok === false) {
@@ -250,7 +264,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
           return
         }
       }
-      if (selectedModel?.provider === 'opencode') {
+      if (props?.model?.provider === 'opencode') {
         toast.error('OpenCode is not connected yet')
         return
       }
@@ -262,18 +276,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
         // Swap the -1 placeholder for the persisted chat: drop the placeholder,
         // select the real one, and keep using it for the rest of this send.
         removeChat(newChat.connectionId, -1)
-        let existingSelectedModel: Model | null = selectedModel;
-        let existingReasoning: ReasoningOption = reasoning;
-        let existingFast: boolean = fast;
-        const existingDangerousQueries = dangerousQueries ?? false;
-        removeSelectedModel(-1);
-        removeReasoning(-1);
-        removeFast(-1);
-        removeDangerousQueries(-1);
-        setSelectedModel(newChat.id, existingSelectedModel);
-        setReasoning(newChat.id, existingReasoning);
-        setFast(newChat.id, existingFast);
-        setDangerousQueries(newChat.id, existingDangerousQueries);
+        deleteChatProperties(-1);
         openChat(newChat.id)
         await handleAgentConnect(newChat)
         // Update the name in the database
@@ -287,18 +290,18 @@ export default function ChatView({ chatId }: ChatViewProps) {
       setInput('')
       pushUserMessage(chat.id, text)
       try {
-        if (selectedModel && !chat.provider) {
-          await window.chatsApi.setProvider(chat.id, selectedModel.provider)
-          setProvider(chat.connectionId, chat.id, selectedModel.provider)
+        if (props?.model && !chat.provider) {
+          await window.chatsApi.setProvider(chat.id, props.model.provider)
+          setProvider(chat.connectionId, chat.id, props.model.provider)
         }
-        if (selectedModel?.provider === 'cursor') {
+        if (props?.model?.provider === 'cursor' && props.model) {
           await window.agentApi.applyModel(chat.id, {
-            modelId: selectedModel.id,
-            reasoning: reasoning || undefined,
-            fast: selectedModel.hasFast && fast,
+            modelId: props.model.id,
+            reasoning: props.reasoning,
+            fast: props.model.hasFast && props.fast === true,
           })
         }
-        let agentQuery = `dangerousQueries: ${dangerousQueries ?? false}\nconnectionId: ${backendConnectionId ?? 'unknown'}\n${text}`;
+        const agentQuery = `dangerousQueries: ${props?.dangerousQueries ?? false}\nconnectionId: ${backendConnectionId ?? 'unknown'}\n${text}`;
         await window.agentApi.prompt(chat.id, agentQuery)
       } catch (error) {
         toast.error(error instanceof Error ? error.message : String(error))
@@ -423,7 +426,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
           <div className="flex items-center justify-between gap-3 px-2 pb-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Select
-              value={selectedModel ? choiceKey(selectedModel) : undefined}
+              value={chatProperties?.model ? choiceKey(chatProperties.model) : undefined}
               onValueChange={handleModelChange}
               disabled={visibleModels.length === 0}
             >
@@ -450,32 +453,32 @@ export default function ChatView({ chatId }: ChatViewProps) {
               </SelectContent>
             </Select>
             <Select
-              value={reasoning || undefined}
-              onValueChange={(value) => setReasoning(chatId, value as ReasoningOption)}
-              disabled={!selectedModel || selectedModel.reasoningOptions.length === 0}
+              value={chatProperties?.reasoning || undefined}
+              onValueChange={(value) => updateChatProperties(chatId, { reasoning: value as ReasoningOption })}
+              disabled={!chatProperties?.model || chatProperties.model.reasoningOptions.length === 0}
             >
               <SelectTrigger size="sm" className="w-32">
                 <SelectValue placeholder="Reasoning" />
               </SelectTrigger>
               <SelectContent>
-                {selectedModel?.reasoningOptions.map((option) => (
+                {chatProperties?.model?.reasoningOptions.map((option) => (
                   <SelectItem key={option} value={option}>
                     {option}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {selectedModel?.hasFast ? (
+            {chatProperties?.model?.hasFast ? (
               <div className="flex items-center gap-2">
-                <Switch id="model-fast" checked={fast} onCheckedChange={(checked) => setFast(chatId, checked)} />
+                <Switch id="model-fast" checked={chatProperties?.fast ?? false} onCheckedChange={(checked) => updateChatProperties(chatId, { fast: checked })} />
                 <Label htmlFor="model-fast">Fast</Label>
               </div>
             ) : null}
             <div className="flex items-center gap-2">
               <Switch
                 id="dangerous-queries"
-                checked={dangerousQueries ?? false}
-                onCheckedChange={(checked) => setDangerousQueries(chatId, checked)}
+                checked={chatProperties?.dangerousQueries ?? false}
+                onCheckedChange={(checked) => updateChatProperties(chatId, { dangerousQueries: checked })}
               />
               <Label htmlFor="dangerous-queries">Dangerous queries</Label>
             </div>

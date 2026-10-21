@@ -1,21 +1,13 @@
-import Model, { ReasoningOption } from "@/interfaces/Model"
+import { ChatProperties } from "@/interfaces/ChatProperties"
 
 export default interface GlobalState {
   openChatId: number | null
   openByConnectionId: Record<number, boolean>
-  selectedModel: Record<number, Model | null>
-  reasoning: Record<number, ReasoningOption>
-  fast: Record<number, boolean>
-  dangerousQueries: Record<number, boolean>
+  chatProperties: Record<number, ChatProperties>
   openChat: (chatId: number) => void
   closeChat: () => void
+  setChatProperties: (chatId: number, chatProperties: ChatProperties) => void
+  updateChatProperties: (chatId: number, patch: Partial<ChatProperties>) => void
   setConnectionOpen: (connectionId: number, open: boolean) => void
-  setSelectedModel: (chatId: number, model: Model | null) => void
-  setReasoning: (chatId: number, reasoning: ReasoningOption) => void
-  setFast: (chatId: number, fast: boolean) => void
-  setDangerousQueries: (chatId: number, dangerousQueries: boolean) => void
-  removeSelectedModel: (chatId: number) => void
-  removeReasoning: (chatId: number) => void
-  removeFast: (chatId: number) => void
-  removeDangerousQueries: (chatId: number) => void
+  deleteChatProperties: (chatId: number) => void
 }
