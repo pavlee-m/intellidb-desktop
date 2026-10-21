@@ -1,10 +1,6 @@
 import { create } from 'zustand'
-import Model from '@/interfaces/Model'
+import CursorModelsState from '@/interfaces/CursorModelState'
 
-interface CursorModelsState {
-  models: Model[]
-  setModels: (models: Model[]) => void
-}
 
 // Lives outside the component tree so the model list survives navigation
 // (e.g. Settings round-trips) without re-paying the listCursor() IPC on
