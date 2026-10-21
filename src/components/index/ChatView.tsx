@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Send, X } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import { Plug, Send, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type ChatActivity from '@/interfaces/ChatActivity'
 import useChatActivityStore from '@/stores/chatActivityStore'
@@ -32,7 +33,8 @@ import { Spinner } from '@/components/ui/spinner'
 import {
   OPENCODE_STUB_MODELS,
 } from '@/lib/opencodeStubModels'
-import { getProviderCliCommand } from '@/lib/cliCommand'
+import { getProviderCliCommand, type CliProvider } from '@/lib/cliCommand'
+import { useProviderReadiness } from '@/lib/providerReadiness'
 import Model, { ReasoningOption } from '@/interfaces/Model'
 import useSettingsStore from '@/stores/settingsStore'
 
@@ -128,7 +130,25 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const mode = isSending ? 'stop' : 'send'
   const isWaitingForActivity = waitForInitialActivity
 
-  const lockedProvider = currentChat?.provider ?? ''
+  const lockedProvider: '' | CliProvider =
+    currentChat?.provider === 'cursor' || currentChat?.provider === 'opencode'
+      ? currentChat.provider
+      : ''
+  const providerReadiness = useProviderReadiness(lockedProvider)
+  const providerBlocked =
+    providerReadiness.status === 'no-provider' ||
+    providerReadiness.status === 'cli-unavailable'
+  const composerTooltip = !isConnectionOnline
+    ? 'Connection is not active'
+    : providerBlocked
+      ? providerReadiness.message
+      : null
+  const modelPlaceholder =
+    providerReadiness.status === 'no-provider'
+      ? 'No provider configured'
+      : providerReadiness.status === 'cli-unavailable'
+        ? 'Model provider not configured'
+        : 'Model'
   // Memoized so `visibleModels` stays referentially stable; otherwise the
   // properties-init effect below would run after every render.
   const visibleModels = useMemo(() => {
@@ -240,6 +260,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     sendInFlightRef.current = true
     try {
       if (!isConnectionOnline) return
+      if (providerBlocked) return
       const text = input.trim()
       if (!text || isSending) return
       // Snapshot the current properties: after openChat(newChat.id) below the
@@ -357,8 +378,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
     <Textarea
       rows={2}
       value={input}
-      disabled={!isConnectionOnline || isWaitingForActivity}
-      className={!isConnectionOnline
+      disabled={!isConnectionOnline || isWaitingForActivity || providerBlocked}
+      className={composerTooltip
         ? 'pointer-events-none border-0 shadow-none focus-visible:ring-0'
         : 'border-0 shadow-none focus-visible:ring-0'}
       onChange={(event) => setInput(event.target.value)}
@@ -374,7 +395,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const sendStopButton = (
     <Button
       type="button"
-      disabled={mode === 'send' && (!input.trim() || !isConnectionOnline || isWaitingForActivity)}
+      disabled={mode === 'send' && (!input.trim() || !isConnectionOnline || isWaitingForActivity || providerBlocked)}
       onClick={() => {
         if (mode === 'stop') {
           void handleCancel()
@@ -410,14 +431,27 @@ export default function ChatView({ chatId }: ChatViewProps) {
         </div>
       )}
       <div className="border-t p-3">
+        {providerBlocked ? (
+          <div className="mb-3 flex flex-col items-start gap-2">
+            <p className="text-sm text-muted-foreground" role="status">
+              {providerReadiness.message}
+            </p>
+            <Button asChild className="justify-start" size="sm" variant="outline">
+              <Link to="/settings/integrations">
+                <Plug className="h-4 w-4" />
+                <span>Settings → Integrations</span>
+              </Link>
+            </Button>
+          </div>
+        ) : null}
         <div className="rounded-lg border border-input">
-          {!isConnectionOnline ? (
+          {composerTooltip ? (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <div className="cursor-not-allowed">{composer}</div>
                 </TooltipTrigger>
-                <TooltipContent>Connection is not active</TooltipContent>
+                <TooltipContent>{composerTooltip}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           ) : (
@@ -426,12 +460,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
           <div className="flex items-center justify-between gap-3 px-2 pb-2">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <Select
-              value={chatProperties?.model ? choiceKey(chatProperties.model) : undefined}
+              value={providerBlocked ? undefined : (chatProperties?.model ? choiceKey(chatProperties.model) : undefined)}
               onValueChange={handleModelChange}
-              disabled={visibleModels.length === 0}
+              disabled={visibleModels.length === 0 || providerBlocked}
             >
-              <SelectTrigger size="sm" className="w-44">
-                <SelectValue placeholder="Model" />
+              <SelectTrigger size="sm" className={providerBlocked ? 'w-60' : 'w-44'}>
+                <SelectValue placeholder={modelPlaceholder} />
               </SelectTrigger>
               <SelectContent>
                 {(['cursor', 'opencode'] as const).map((provider) => {
@@ -483,13 +517,13 @@ export default function ChatView({ chatId }: ChatViewProps) {
               <Label htmlFor="dangerous-queries">Dangerous queries</Label>
             </div>
           </div>
-          {mode === 'send' && !isConnectionOnline ? (
+          {mode === 'send' && composerTooltip ? (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="cursor-not-allowed">{sendStopButton}</span>
                 </TooltipTrigger>
-                <TooltipContent>Connection is not active</TooltipContent>
+                <TooltipContent>{composerTooltip}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           ) : (
