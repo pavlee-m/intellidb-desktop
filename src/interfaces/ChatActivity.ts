@@ -1,4 +1,4 @@
-export type ChatActivityKind = 'user' | 'agent_message' | 'agent_thought' | 'tool' | 'plan'
+type ChatActivityKind = 'user' | 'agent_message' | 'agent_thought' | 'tool' | 'plan'
 
 export default interface ChatActivity {
   key: string

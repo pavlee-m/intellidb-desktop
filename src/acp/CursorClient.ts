@@ -86,7 +86,7 @@ export class CursorClient implements ProviderClient {
         ]);
 
         if (this.existingSessionId) {
-            let loaded: acp.LoadSessionResponse = await this.connection.agent.request(acp.methods.agent.session.load, {
+            await this.connection.agent.request(acp.methods.agent.session.load, {
                 sessionId: this.existingSessionId,
                 cwd: process.cwd(),
                 mcpServers: this.mcpServers,

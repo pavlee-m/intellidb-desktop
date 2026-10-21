@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 
-export type KeyringBackendId = 'gnome-libsecret' | 'kwallet6' | 'kwallet5' | 'kwallet';
+type KeyringBackendId = 'gnome-libsecret' | 'kwallet6' | 'kwallet5' | 'kwallet';
 
 interface KeyringBackend {
   id: KeyringBackendId;

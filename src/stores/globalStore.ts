@@ -23,8 +23,9 @@ const useGlobalStore = create<GlobalState>((set, get) => ({
   setConnectionOpen: (connectionId: number, open: boolean) => set({ openByConnectionId: { ...get().openByConnectionId, [connectionId]: open } }),
 
   deleteChatProperties: (chatId: number) => set((state) => {
-    const { [chatId]: _removed, ...rest } = state.chatProperties
-    return { chatProperties: rest }
+    const chatProperties = { ...state.chatProperties }
+    delete chatProperties[chatId]
+    return { chatProperties }
   }),
 }))
 

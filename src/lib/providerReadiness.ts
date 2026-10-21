@@ -10,7 +10,7 @@ import useSettingsStore from '@/stores/settingsStore'
 
 const CLI_PROVIDERS = Object.keys(PROVIDER_CLI) as CliProvider[]
 
-export type ProviderReadiness =
+type ProviderReadiness =
   | { status: 'checking' }
   | { status: 'ready' }
   | { status: 'no-provider'; message: string }

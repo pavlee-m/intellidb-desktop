@@ -1,5 +1,4 @@
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 import useSettingsStore from '@/stores/settingsStore'
 import { useEffect } from 'react'
@@ -20,7 +19,6 @@ function RootLayout()  {
   return (<>
     <Outlet />
     <Toaster />
-    {/* <TanStackRouterDevtools /> */}
   </>)
 }
 

@@ -1,7 +1,7 @@
 import type Settings from '@/interfaces/Settings'
 import { DEFAULT_CURSOR_CLI_COMMAND } from '@/lib/cursorCliCommand'
 
-export type CliCommandFailureReason =
+type CliCommandFailureReason =
   | 'empty'
   | 'invalid'
   | 'not-found'
@@ -32,7 +32,7 @@ export const PROVIDER_CLI: Record<CliProvider, {
   },
 }
 
-export function normalizeCliCommand(raw: string | null | undefined, fallback: string): string {
+function normalizeCliCommand(raw: string | null | undefined, fallback: string): string {
   const trimmed = raw?.trim() ?? ''
   return trimmed.length > 0 ? trimmed : fallback
 }
