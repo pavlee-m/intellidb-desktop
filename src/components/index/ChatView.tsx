@@ -35,6 +35,7 @@ import {
 } from '@/lib/opencodeStubModels'
 import { getProviderCliCommand, type CliProvider } from '@/lib/cliCommand'
 import { useProviderReadiness } from '@/lib/providerReadiness'
+import { deriveInitialChatTitle } from '@/lib/chatTitle'
 import Model, { ReasoningOption } from '@/interfaces/Model'
 import useSettingsStore from '@/stores/settingsStore'
 
@@ -113,6 +114,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const sendInFlightRef = useRef(false)
   const addChat = useChatStore((state) => state.addChat)
   const removeChat = useChatStore((state) => state.removeChat)
+  const renameChat = useChatStore((state) => state.renameChat)
   const setSessionId = useChatStore((state) => state.setSessionId)
   const setProvider = useChatStore((state) => state.setProvider)
   const setConnectionOpen = useGlobalStore((state) => state.setConnectionOpen)
@@ -300,10 +302,10 @@ export default function ChatView({ chatId }: ChatViewProps) {
         deleteChatProperties(-1);
         openChat(newChat.id)
         await handleAgentConnect(newChat)
-        // Update the name in the database
-        await window.chatsApi.renameChat(newChat.id, text)
-        newChat.name = text;
-        chat = newChat;
+        const initialTitle = deriveInitialChatTitle(text)
+        await window.chatsApi.renameChat(newChat.id, initialTitle)
+        renameChat(newChat.connectionId, newChat.id, initialTitle)
+        chat = { ...newChat, name: initialTitle }
       }
       if (!chat) return
 
