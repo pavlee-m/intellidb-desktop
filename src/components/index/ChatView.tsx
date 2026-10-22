@@ -209,48 +209,45 @@ export default function ChatView({ chatId }: ChatViewProps) {
     }
   }, [currentChat?.id, isConnectionOnline])
 
-  useEffect(() => {
-    // Refresh the cached all model list. Reads are instant from the store,
-    // so this only keeps the cache up to date in the background.
-    let cancelled = false
-    void (async () => {
-      const loaded = settings ?? await window.settingsApi.getSettings()
-      if (!settings) {
-        setSettings(loaded)
-        return
-      }
-      if (cancelled) {
-        return
-      }
-      if (!loaded.cursor_cli_integration_enabled) {
-        setAllModels([])
-        return
-      }
-      try {
-        const rows = await window.modelsApi.listCursor()
-        if (cancelled) {
-          return
-        }
-        setAllModels(rows.map((row) => ({
+  const loadModels = async () => {
+    // Load cursor models
+    try{
+      const cursorModels = await window.modelsApi.listCursor()
+      const opencodeModels = OPENCODE_STUB_MODELS
+      let allModels: Model[] = []
+      for (const model of cursorModels) {
+        allModels.push({
           provider: 'cursor',
-          id: row.id,
-          name: row.name,
-          reasoningOptions: [...row.reasoningOptions],
-          hasFast: row.hasFast,
-        })))
-      } catch (error) {
-        if (!cancelled) {
-          setAllModels([])
-          if (!providerBlocked) {
-            toast.error(error instanceof Error ? error.message : String(error))
-          }
-        }
+          id: model.id,
+          name: model.name,
+          reasoningOptions: [...model.reasoningOptions],
+          hasFast: model.hasFast,
+        })
       }
-    })()
-    return () => {
-      cancelled = true
+      for (const model of opencodeModels) {
+        allModels.push({
+          provider: 'opencode',
+          id: model.id,
+          name: model.name,
+          reasoningOptions: [...model.reasoningOptions],
+          hasFast: model.hasFast,
+        })
+      }
+      setAllModels(allModels)
     }
-  }, [settings, setSettings])
+    catch (error) {
+      if (!providerBlocked) {
+        toast.error(error instanceof Error ? error.message : String(error))
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (allModels.length === 0) {
+      // try loading models
+      loadModels()
+    }
+  }, [chatId, settings])
 
 
   const handleModelChange = (nextKey: string) => {
