@@ -99,6 +99,24 @@ async function main() {
     return;
   }
 
+  if (cmd === 'hover') {
+    const [selector] = args;
+    if (!selector) fail('hover needs a css selector');
+    await withPage(async (page) => {
+      const rect = await evalIn(page, `(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return null;
+        el.scrollIntoView({ block: 'center', inline: 'center' });
+        const r = el.getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      })()`);
+      if (!rect) fail(`element not found: ${selector}`);
+      await page.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: rect.x, y: rect.y });
+      console.log(`hovered ${selector} at (${rect.x}, ${rect.y})`);
+    });
+    return;
+  }
+
   if (cmd === 'click') {
     const [selector] = args;
     if (!selector) fail('click needs a css selector');
@@ -115,6 +133,25 @@ async function main() {
       await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: rect.x, y: rect.y, button: 'left', clickCount: 1 });
       await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: rect.x, y: rect.y, button: 'left', clickCount: 1 });
       console.log(`clicked ${selector} at (${rect.x}, ${rect.y})`);
+    });
+    return;
+  }
+
+  if (cmd === 'rightclick') {
+    const [selector] = args;
+    if (!selector) fail('rightclick needs a css selector');
+    await withPage(async (page) => {
+      const rect = await evalIn(page, `(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        if (!el) return null;
+        el.scrollIntoView({ block: 'center', inline: 'center' });
+        const r = el.getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      })()`);
+      if (!rect) fail(`element not found: ${selector}`);
+      await page.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: rect.x, y: rect.y, button: 'right', clickCount: 1 });
+      await page.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: rect.x, y: rect.y, button: 'right', clickCount: 1 });
+      console.log(`right-clicked ${selector} at (${rect.x}, ${rect.y})`);
     });
     return;
   }
