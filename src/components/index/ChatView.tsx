@@ -29,7 +29,7 @@ import { ChatProperties } from '@/interfaces/ChatProperties'
 import useChatStore from '@/stores/chatStore'
 import useGlobalStore from '@/stores/globalStore'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
-import useCursorModelsStore from '@/stores/modelsStore'
+import useModelsStore from '@/stores/modelsStore'
 import { Spinner } from '@/components/ui/spinner'
 import {
   OPENCODE_STUB_MODELS,
@@ -106,10 +106,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const [waitForInitialActivity, setWaitForInitialActivity] = useState(chatId === -1 ? false: true)
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
-
   const chatProperties = useGlobalStore((state) => state.chatProperties[chatId]);
-  const cursorModels = useCursorModelsStore((state) => state.models)
-  const setCursorModels = useCursorModelsStore((state) => state.setModels)
+  const allModels = useModelsStore((state) => state.models)
+  const setAllModels = useModelsStore((state) => state.setModels)
   const settings = useSettingsStore((state) => state.settings)
   const setSettings = useSettingsStore((state) => state.setSettings)
   const setChatProperties = useGlobalStore((state) => state.setChatProperties)
@@ -158,13 +157,13 @@ export default function ChatView({ chatId }: ChatViewProps) {
   // properties-init effect below would run after every render.
   const visibleModels = useMemo(() => {
     const catalog: Model[] = [
-      ...(settings?.cursor_cli_integration_enabled ? cursorModels : []),
+      ...(settings?.cursor_cli_integration_enabled ? allModels : []),
       ...(settings?.opencode_integration_enabled ? OPENCODE_STUB_MODELS : []),
     ]
     return lockedProvider
       ? catalog.filter((model) => model.provider === lockedProvider)
       : catalog
-  }, [settings, cursorModels, lockedProvider])
+  }, [settings, allModels, lockedProvider])
 
 
   // Single source of truth for a freshly-selected model's defaults.
@@ -194,7 +193,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
     // (or if the locked provider has no models in the catalog), so only
     // default once there is actually a model available.
     if (!chatProperties && visibleModels.length > 0) {
-      
       setChatProperties(chatId, createChatProperties(visibleModels[0]))
     }
   }, [chatId, chatProperties, visibleModels])
@@ -212,7 +210,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }, [currentChat?.id, isConnectionOnline])
 
   useEffect(() => {
-    // Refresh the cached cursor model list. Reads are instant from the store,
+    // Refresh the cached all model list. Reads are instant from the store,
     // so this only keeps the cache up to date in the background.
     let cancelled = false
     void (async () => {
@@ -225,7 +223,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
         return
       }
       if (!loaded.cursor_cli_integration_enabled) {
-        setCursorModels([])
+        setAllModels([])
         return
       }
       try {
@@ -233,7 +231,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
         if (cancelled) {
           return
         }
-        setCursorModels(rows.map((row) => ({
+        setAllModels(rows.map((row) => ({
           provider: 'cursor',
           id: row.id,
           name: row.name,
@@ -242,8 +240,10 @@ export default function ChatView({ chatId }: ChatViewProps) {
         })))
       } catch (error) {
         if (!cancelled) {
-          setCursorModels([])
-          toast.error(error instanceof Error ? error.message : String(error))
+          setAllModels([])
+          if (!providerBlocked) {
+            toast.error(error instanceof Error ? error.message : String(error))
+          }
         }
       }
     })()
