@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Plug, Send, X } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
 import type ChatActivity from '@/interfaces/ChatActivity'
 import useChatActivityStore from '@/stores/chatActivityStore'
@@ -59,7 +60,11 @@ function ActivityEntry({ entry }: { entry: ChatActivity }) {
         </div>
       )
     case 'agent_message':
-      return <div className="self-start whitespace-pre-wrap">{entry.text}</div>
+      return (
+        <div className="chat-markdown self-start">
+          <ReactMarkdown>{entry.text}</ReactMarkdown>
+        </div>
+      )
     case 'agent_thought':
       return (
         <div className="self-start text-sm italic text-muted-foreground">
