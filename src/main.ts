@@ -11,9 +11,12 @@ import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
-import { ensureAgent, promptAgent, applyModelChoice, setMode, setAgentSessionPersister, setCursorCliCommandProvider, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest } from './lib/agentHost';
+import { ensureAgent, promptAgent, applyModelChoice, setMode, setAgentSessionPersister, setChatProviderClaim, setAgentCliResolver, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest, sendAgentTurn } from './lib/agentHost';
+import type { AgentResult } from './interfaces/AgentSession';
 import { parseSessionMode } from './interfaces/SessionMode';
 import { fetchCursorModels } from './lib/modelFetching';
+import { getProviderCliCommand } from './lib/cliCommand';
+import { parseCliProvider, parseTurnConfig, type TurnConfig } from './lib/turnConfig';
 import { checkCliCommand } from './lib/cliCommandCheck';
 import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND } from './lib/cursorCliCommand';
 import { encryptSecret, decryptSecret } from './lib/encryptedStorage';
@@ -501,10 +504,69 @@ app.on('ready', async () => {
 
     // Give the agent host a method to persist the session id to the database.
     setAgentSessionPersister((chatId, sessionId) => dbManager.updateChatSessionId(chatId, sessionId));
-    setCursorCliCommandProvider(() => dbManager.getCursorCliCommand());
+    setChatProviderClaim((chatId, provider) => dbManager.claimChatProvider(chatId, provider));
+    setAgentCliResolver(async (provider) => {
+      if (provider === 'cursor') {
+        return dbManager.getCursorCliCommand();
+      }
+      const loaded = await dbManager.getSettings();
+      return getProviderCliCommand('opencode', loaded);
+    });
 
-    ipcMain.handle('agent:connect', async (event, chatId: number, sessionId: string) : Promise<string> => {
-      return ensureAgent(chatId, sessionId, (entry) => event.sender.send('agent:activity', { chatId, entry }));
+    ipcMain.handle('agent:connect', async (event, chatId: number, sessionId: unknown): Promise<AgentResult> => {
+      const chat = await dbManager.getChat(chatId);
+      if (!chat) {
+        return { ok: false, provider: null, sessionId: null, message: 'Chat not found' };
+      }
+      const provider = parseCliProvider(chat.provider);
+      return ensureAgent({
+        chatId,
+        sessionId: typeof sessionId === 'string' ? sessionId : '',
+        provider,
+        onActivity: (entry) => event.sender.send('agent:activity', { chatId, entry }),
+      });
+    });
+
+    ipcMain.handle('agent:sendTurn', async (
+      event,
+      chatId: number,
+      sessionId: unknown,
+      config: unknown,
+      text: unknown,
+    ): Promise<AgentResult> => {
+      const chat = await dbManager.getChat(chatId);
+      if (!chat) {
+        return { ok: false, provider: null, sessionId: null, message: 'Chat not found' };
+      }
+      const existingConnection = connections.find(
+        ({ connection }) => connection.id === chat.connectionId,
+      );
+      if (!existingConnection || !existingConnection.backendConnectionId) {
+        return {
+          ok: false,
+          provider: null,
+          sessionId: null,
+          message: 'Connect the database before sending messages',
+        };
+      }
+      let turn: TurnConfig;
+      try {
+        turn = parseTurnConfig(config);
+      } catch (error) {
+        return {
+          ok: false,
+          provider: null,
+          sessionId: null,
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
+      return sendAgentTurn({
+        chatId,
+        sessionId: typeof sessionId === 'string' ? sessionId : '',
+        config: turn,
+        text: typeof text === 'string' ? text : '',
+        onActivity: (entry) => event.sender.send('agent:activity', { chatId, entry }),
+      });
     });
 
     ipcMain.handle('agent:cancel', async (_event, chatId: number) => {

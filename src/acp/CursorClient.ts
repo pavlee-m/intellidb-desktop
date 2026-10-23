@@ -1,7 +1,7 @@
 import ACPClientHandlers from "../interfaces/ACPClientHandlers";
-import ProviderClient from "../interfaces/ProviderClient";
+import type { AgentSession } from "../interfaces/AgentSession";
 import type { SessionMode } from "../interfaces/SessionMode";
-import type { CursorCliCommand } from "../lib/cursorCliCommand";
+import type { TurnConfig } from "../lib/turnConfig";
 import * as acp from "@agentclientprotocol/sdk";
 import { ChildProcess, spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
@@ -24,7 +24,8 @@ function flatConfigValues(option: acp.SessionConfigOption): string[] {
     return values;
 }
 
-export class CursorClient implements ProviderClient {
+export class CursorClient implements AgentSession {
+    readonly provider = 'cursor' as const;
 
     private acpClient!: ACPClient;
     private agentProcess!: ChildProcess;
@@ -37,7 +38,7 @@ export class CursorClient implements ProviderClient {
 
     constructor(
         private handlers: ACPClientHandlers,
-        private command: CursorCliCommand,
+        private command: string,
         private existingSessionId?: string,
         private mcpServers: acp.McpServer[] = [],
     ) {
@@ -102,6 +103,18 @@ export class CursorClient implements ProviderClient {
         }
 
         return initResult;
+    }
+
+    async applyTurn(config: TurnConfig): Promise<void> {
+        if (config.provider !== 'cursor') {
+            throw new Error('Cursor cannot apply an OpenCode turn');
+        }
+        await this.applyModelChoice({
+            modelId: config.modelId,
+            reasoning: config.reasoning,
+            fast: config.fast,
+        });
+        await this.setMode(config.mode);
     }
 
     async applyModelChoice(choice: { modelId: string; reasoning?: string; fast: boolean }): Promise<void> {

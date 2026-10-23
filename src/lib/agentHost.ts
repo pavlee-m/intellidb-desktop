@@ -1,13 +1,30 @@
 import ChatActivity from '@/interfaces/ChatActivity';
 import ACPClientHandlers from '@/interfaces/ACPClientHandlers';
-import ProviderClient from '@/interfaces/ProviderClient';
+import type { AgentResult, AgentSession } from '@/interfaces/AgentSession';
 import type { SessionMode } from '@/interfaces/SessionMode';
 import { CursorClient } from '@/acp/CursorClient';
-import type { CursorCliCommand } from '@/lib/cursorCliCommand';
+import { OpenCodeClient } from '@/acp/OpenCodeClient';
 import { checkCliCommand } from '@/lib/cliCommandCheck';
+import type { CliProvider } from '@/lib/cliCommand';
+import { readOpenCodeAuth } from '@/lib/openCodeAuth';
+import type { TurnConfig } from '@/lib/turnConfig';
 import type * as acp from '@agentclientprotocol/sdk';
 
-const agents = new Map<number, { client: ProviderClient | undefined; ready: boolean }>();
+export type ClaimResult =
+  | { ok: true }
+  | { ok: false; stored: CliProvider | null };
+
+type LiveAgent = {
+  client: AgentSession | undefined;
+  ready: boolean;
+  provider: CliProvider;
+};
+
+type ConnectableSession = AgentSession & {
+  connect(): Promise<unknown>;
+};
+
+const agents = new Map<number, LiveAgent>();
 
 // MCP servers handed to every ACP session (set once at startup by main.ts).
 let agentMcpServers: acp.McpServer[] = [];
@@ -94,99 +111,221 @@ export function setAgentSessionPersister(persister: (chatId: number, sessionId: 
     persistSessionId = persister;
 }
 
-let cursorCliCommandProvider: (() => Promise<CursorCliCommand>) | undefined;
+let claimProvider: ((chatId: number, provider: CliProvider) => Promise<ClaimResult>) | undefined;
 
-export function setCursorCliCommandProvider(provider: () => Promise<CursorCliCommand>): void {
-    cursorCliCommandProvider = provider;
+export function setChatProviderClaim(
+  claim: (chatId: number, provider: CliProvider) => Promise<ClaimResult>,
+): void {
+  claimProvider = claim;
 }
 
-async function startAgent(
-    chatId: number,
-    sessionId: string | undefined,
-    onActivity: (entry: ChatActivity) => void,
-    command: CursorCliCommand,
-): Promise<{ client: ProviderClient; ready: boolean }> {
-    agents.set(chatId, { client: undefined, ready: false });
-    const client = new CursorClient(createHandlers(onActivity), command, sessionId, agentMcpServers);
-    try{
-      await client.connect();
-    }
-    catch (error) {
-      console.error('Agent connect failed for chat', chatId, error);
-      client.dispose();
-      agents.delete(chatId);
-      throw new Error(error instanceof Error ? error.message : String(error));
-    }
-    if (persistSessionId) {
-        await persistSessionId(chatId, client.getSessionId());
-    }
-    return { client, ready: true };
+let resolveAgentCli: ((provider: CliProvider) => Promise<string>) | undefined;
+
+export function setAgentCliResolver(
+  resolve: (provider: CliProvider) => Promise<string>,
+): void {
+  resolveAgentCli = resolve;
 }
 
-export async function ensureAgent(
-    chatId: number,
-    sessionId: string | undefined,
-    onActivity: (entry: ChatActivity) => void,
-): Promise<string> {
-    const existing = agents.get(chatId);
-    if (existing?.client) {
-      console.log("Existing agent found, returning session ID");
-      return existing.client.getSessionId();
-    }
-    if (existing) {
-      agents.delete(chatId);
-    }
+function liveSessionId(client: AgentSession | undefined): string | null {
+  if (!client) {
+    return null;
+  }
+  const sessionId = client.getSessionId();
+  return typeof sessionId === 'string' && sessionId.length > 0 ? sessionId : null;
+}
 
-    if (!cursorCliCommandProvider) {
-        throw new Error('Cursor CLI command provider is not set');
-    }
-    const command = await cursorCliCommandProvider();
+function failureResult(
+  provider: CliProvider | null,
+  sessionId: string | null,
+  error: unknown,
+): AgentResult {
+  const auth = readOpenCodeAuth(error);
+  const message = auth?.message ?? (error instanceof Error ? error.message : String(error));
+  return { ok: false, provider, sessionId, message };
+}
 
-    const availability = await checkCliCommand(command);
-    if (availability.ok === false) {
-      throw new Error(`Cursor CLI is unavailable: ${availability.message}`);
-    }
+function createClient(
+  provider: CliProvider,
+  command: string,
+  existingSessionId: string | undefined,
+  onActivity: (entry: ChatActivity) => void,
+): ConnectableSession {
+  const handlers = createHandlers(onActivity);
+  if (provider === 'cursor') {
+    return new CursorClient(handlers, command, existingSessionId, agentMcpServers);
+  }
+  if (provider === 'opencode') {
+    return new OpenCodeClient({
+      handlers,
+      command,
+      existingSessionId,
+      mcpServers: agentMcpServers,
+    });
+  }
+  const _exhaustive: never = provider;
+  return _exhaustive;
+}
 
-    const storedId = sessionId && sessionId.length > 0 ? sessionId : undefined;
+type Spawned =
+  | { ok: true; client: AgentSession }
+  | { ok: false; sessionId: string | null; error: unknown };
+
+async function spawnAgent(
+  chatId: number,
+  provider: CliProvider,
+  command: string,
+  existingSessionId: string | undefined,
+  onActivity: (entry: ChatActivity) => void,
+): Promise<Spawned> {
+  agents.set(chatId, { client: undefined, ready: false, provider });
+  const client = createClient(provider, command, existingSessionId, onActivity);
+  try {
+    await client.connect();
+  } catch (error) {
+    const sessionId = liveSessionId(client);
+    client.dispose();
+    agents.delete(chatId);
+    console.error('Agent connect failed for chat', chatId, error);
+    return { ok: false, sessionId, error };
+  }
+  agents.set(chatId, { client, ready: true, provider });
+  return { ok: true, client };
+}
+
+async function rememberSession(
+  chatId: number,
+  provider: CliProvider,
+  client: AgentSession,
+): Promise<AgentResult> {
+  const sessionId = client.getSessionId();
+  if (persistSessionId) {
     try {
-      const started = await startAgent(chatId, storedId, onActivity, command);
-      agents.set(chatId, started);
-      return started.client.getSessionId();
+      await persistSessionId(chatId, sessionId);
     } catch (error) {
-      if (!storedId) {
-        agents.delete(chatId);
-        throw error;
-      }
-      // A stored id can be stale; fall back to a fresh session.
-      console.log("Failed to connect to existing agent, creating a new agent");
-      try {
-        const started = await startAgent(chatId, undefined, onActivity, command);
-        agents.set(chatId, started);
-        return started.client.getSessionId();
-      } catch (retryError) {
-        agents.delete(chatId);
-        throw retryError;
-      }
+      return failureResult(provider, sessionId, error);
     }
+  }
+  return { ok: true, provider, sessionId };
+}
+
+export async function ensureAgent(input: {
+  chatId: number;
+  sessionId: string;
+  provider: CliProvider;
+  onActivity: (entry: ChatActivity) => void;
+}): Promise<AgentResult> {
+  const { chatId, sessionId, provider, onActivity } = input;
+  if (!claimProvider) {
+    return { ok: false, provider: null, sessionId: null, message: 'Chat provider claim is not set' };
+  }
+  const claim = await claimProvider(chatId, provider);
+  if (claim.ok === false) {
+    return {
+      ok: false,
+      provider: claim.stored,
+      sessionId: null,
+      message: claim.stored ? `This chat already uses ${claim.stored}` : 'Chat not found',
+    };
+  }
+
+  const existing = agents.get(chatId);
+  if (existing && existing.provider !== provider) {
+    return {
+      ok: false,
+      provider: existing.provider,
+      sessionId: liveSessionId(existing.client),
+      message: `This chat is connected to ${existing.provider}`,
+    };
+  }
+  if (existing?.ready && existing.client) {
+    return { ok: true, provider, sessionId: existing.client.getSessionId() };
+  }
+
+  if (!resolveAgentCli) {
+    return { ok: false, provider, sessionId: null, message: 'Agent CLI resolver is not set' };
+  }
+  let command: string;
+  try {
+    command = await resolveAgentCli(provider);
+  } catch (error) {
+    return failureResult(provider, null, error);
+  }
+  const availability = await checkCliCommand(command);
+  if (availability.ok === false) {
+    return { ok: false, provider, sessionId: null, message: availability.message };
+  }
+
+  if (existing) {
+    agents.delete(chatId);
+  }
+
+  const storedId = sessionId.length > 0 ? sessionId : undefined;
+  let spawned = await spawnAgent(chatId, provider, command, storedId, onActivity);
+  if (spawned.ok === false && storedId) {
+    spawned = await spawnAgent(chatId, provider, command, undefined, onActivity);
+  }
+  if (spawned.ok === false) {
+    return failureResult(provider, spawned.sessionId, spawned.error);
+  }
+  return rememberSession(chatId, provider, spawned.client);
+}
+
+export async function sendAgentTurn(input: {
+  chatId: number;
+  sessionId: string;
+  config: TurnConfig;
+  text: string;
+  onActivity: (entry: ChatActivity) => void;
+}): Promise<AgentResult> {
+  const connected = await ensureAgent({
+    chatId: input.chatId,
+    sessionId: input.sessionId,
+    provider: input.config.provider,
+    onActivity: input.onActivity,
+  });
+  if (connected.ok === false) {
+    return connected;
+  }
+  const client = agents.get(input.chatId)?.client;
+  if (!client) {
+    return {
+      ok: false,
+      provider: input.config.provider,
+      sessionId: connected.sessionId,
+      message: 'Agent is not connected',
+    };
+  }
+  try {
+    await client.applyTurn(input.config);
+    await client.sendMessage(input.text);
+  } catch (error) {
+    return failureResult(
+      input.config.provider,
+      liveSessionId(client) ?? connected.sessionId,
+      error,
+    );
+  }
+  return connected;
 }
 
 export async function applyModelChoice(
   chatId: number,
   choice: { modelId: string; reasoning?: string; fast: boolean },
 ): Promise<void> {
-  const agent = agents.get(chatId);
-  if (!agent?.client) {
+  const client = agents.get(chatId)?.client;
+  if (!(client instanceof CursorClient)) {
     throw new Error('Agent is not connected');
   }
-  await agent.client.applyModelChoice(choice);
+  await client.applyModelChoice(choice);
 }
 
 export async function setMode(chatId: number, mode: SessionMode): Promise<void> {
-  const agent = agents.get(chatId);
-  if (!agent?.client) {
+  const client = agents.get(chatId)?.client;
+  if (!(client instanceof CursorClient)) {
     throw new Error('Agent is not connected');
   }
-  await agent.client.setMode(mode);
+  await client.setMode(mode);
 }
 
 export async function cancelRequest(chatId: number): Promise<void> {

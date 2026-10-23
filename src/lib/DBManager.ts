@@ -1,4 +1,6 @@
 import Settings from '@/interfaces/Settings';
+import type { CliProvider } from '@/lib/cliCommand';
+import type { ClaimResult } from '@/lib/agentHost';
 import { CURSOR_CLI_BINARY_KEY, parseCursorCliCommand, type CursorCliCommand } from '@/lib/cursorCliCommand';
 import { DEFAULT_SQLMCP_PORT, parseSqlmcpPort } from '@/lib/sqlmcpPort';
 import SettingsModel from '../models/SettingsModel';
@@ -10,6 +12,13 @@ import Connection from '@/interfaces/Connection';
 type ConnectionRow = Omit<Connection, 'sqlalchemy_query'> & {
   sqlalchemy_query: string | null;
 };
+
+function knownProvider(value: string): CliProvider | null {
+  if (value === 'cursor' || value === 'opencode') {
+    return value;
+  }
+  return null;
+}
 
 class DBManager {
   constructor(private readonly db: Database) {}
@@ -164,6 +173,56 @@ class DBManager {
       SET Provider = 'cursor'
       WHERE SessionID IS NOT NULL AND SessionID != '';
     `);
+  }
+
+  async claimChatProvider(chatId: number, provider: CliProvider): Promise<ClaimResult> {
+    const row = await this.db.get<{ provider: string }>(
+      `
+        SELECT Provider AS provider
+        FROM Chat
+        WHERE ID = ?;
+      `,
+      [chatId],
+    );
+    if (!row) {
+      return { ok: false, stored: null };
+    }
+    if (row.provider === provider) {
+      return { ok: true };
+    }
+    const stored = knownProvider(row.provider);
+    if (row.provider !== '') {
+      return { ok: false, stored };
+    }
+
+    // A second send can write the provider between the read above and this update.
+    const result = await this.db.run(
+      `
+        UPDATE Chat
+        SET Provider = ?
+        WHERE ID = ? AND Provider = '';
+      `,
+      [provider, chatId],
+    );
+    if ((result.changes ?? 0) > 0) {
+      return { ok: true };
+    }
+
+    const again = await this.db.get<{ provider: string }>(
+      `
+        SELECT Provider AS provider
+        FROM Chat
+        WHERE ID = ?;
+      `,
+      [chatId],
+    );
+    if (!again) {
+      return { ok: false, stored: null };
+    }
+    if (again.provider === provider) {
+      return { ok: true };
+    }
+    return { ok: false, stored: knownProvider(again.provider) };
   }
 
   async updateChatProvider(chatId: number, provider: string): Promise<void> {
