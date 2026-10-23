@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { REASONING_OPTIONS } from '../src/interfaces/Model'
-import { parseVerboseOpenCodeCatalog } from '../src/lib/openCodeModels'
+import { parseVerboseOpenCodeCatalog } from '../src/lib/modelFetching'
 
 const fixturePath = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
