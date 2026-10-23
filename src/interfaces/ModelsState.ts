@@ -1,4 +1,4 @@
-import Model from "./Model"
+import type { Model } from "./Model"
 
 export default interface ModelsState {
   models: Model[]

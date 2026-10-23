@@ -4,8 +4,9 @@ import {
   DEFAULT_CURSOR_CLI_COMMAND,
   type CursorCliCommand,
 } from '@/lib/cursorCliCommand'
-import Model, {
+import {
   REASONING_OPTIONS,
+  type CursorModel,
   type ReasoningOption,
 } from '@/interfaces/Model'
 
@@ -121,7 +122,7 @@ function pickDisplayName(rows: NameRow[]): string {
   return pool[0].cleaned
 }
 
-function groupVariants(rows: VariantRow[]): Model[] {
+function groupVariants(rows: VariantRow[]): CursorModel[] {
   const families = new Map<string, FamilyGroup>()
 
   for (const row of rows) {
@@ -147,7 +148,7 @@ function groupVariants(rows: VariantRow[]): Model[] {
     })
   }
 
-  const models: Model[] = []
+  const models: CursorModel[] = []
   for (const [familyId, family] of families) {
     models.push({
       provider: 'cursor',
@@ -162,7 +163,7 @@ function groupVariants(rows: VariantRow[]): Model[] {
   return models
 }
 
-function parseModelCatalog(stdout: string): Model[] {
+function parseModelCatalog(stdout: string): CursorModel[] {
   const lines = stdout.split(/\r?\n/)
   const hasHeader = lines.some((line) => line.trim() === 'Available models')
   if (!hasHeader) {
@@ -190,7 +191,7 @@ function parseModelCatalog(stdout: string): Model[] {
 
 export async function fetchCursorModels(
   cliCommand: CursorCliCommand = DEFAULT_CURSOR_CLI_COMMAND,
-): Promise<Model[]> {
+): Promise<CursorModel[]> {
   let stdout: string
   try {
     const result = await execFileAsync(cliCommand, ['models'], {

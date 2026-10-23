@@ -4,7 +4,7 @@ import Chat from '@/interfaces/Chat'
 import Connection from '@/interfaces/Connection'
 import BackendConnection from './interfaces/BackendConnection'
 import type ChatActivity from '@/interfaces/ChatActivity'
-import type Model from '@/interfaces/Model'
+import type { Model } from '@/interfaces/Model'
 import type { CliCommandCheckResult } from '@/lib/cliCommand'
 import type { SessionMode } from '@/interfaces/SessionMode'
 

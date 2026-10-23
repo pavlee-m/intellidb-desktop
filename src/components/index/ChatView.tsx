@@ -38,7 +38,7 @@ import {
 import { getProviderCliCommand, type CliProvider } from '@/lib/cliCommand'
 import { useProviderReadiness } from '@/lib/providerReadiness'
 import { deriveInitialChatTitle } from '@/lib/chatTitle'
-import Model, { ReasoningOption } from '@/interfaces/Model'
+import type { Model, ReasoningOption } from '@/interfaces/Model'
 import useSettingsStore from '@/stores/settingsStore'
 
 function choiceKey(model: Model): string {
@@ -218,8 +218,11 @@ export default function ChatView({ chatId }: ChatViewProps) {
     try{
       const cursorModels = await window.modelsApi.listCursor()
       const opencodeModels = OPENCODE_STUB_MODELS
-      let allModels: Model[] = []
+      const allModels: Model[] = []
       for (const model of cursorModels) {
+        if (model.provider !== 'cursor') {
+          continue
+        }
         allModels.push({
           provider: 'cursor',
           id: model.id,

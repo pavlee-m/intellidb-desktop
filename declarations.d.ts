@@ -3,7 +3,7 @@ type Settings = import('./src/interfaces/Settings').default;
 type Connection = import('./src/interfaces/Connection').default;
 type Chat = import('./src/interfaces/Chat').default;
 type ChatActivity = import('./src/interfaces/ChatActivity').default;
-type Model = import('./src/interfaces/Model').default;
+type Model = import('./src/interfaces/Model').Model;
 type CliCommandCheckResult = import('./src/lib/cliCommand').CliCommandCheckResult;
 type SessionMode = import('./src/interfaces/SessionMode').SessionMode;
 
