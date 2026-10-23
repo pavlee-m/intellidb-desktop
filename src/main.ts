@@ -11,12 +11,12 @@ import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
-import { ensureAgent, setAgentSessionPersister, setChatProviderClaim, setAgentCliResolver, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest, sendAgentTurn } from './lib/agentHost';
+import { ensureAgent, setAgentSessionPersister, setChatProviderClaim, setAgentCliResolver, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest, sendAgentTurn, applyLiveConfig } from './lib/agentHost';
 import type { AgentResult } from './interfaces/AgentSession';
 import { fetchCursorModels } from './lib/modelFetching';
 import { fetchOpenCodeModels } from './lib/openCodeModels';
 import { getProviderCliCommand } from './lib/cliCommand';
-import { parseCliProvider, parseTurnConfig, type TurnConfig } from './lib/turnConfig';
+import { parseCliProvider, type TurnConfig } from './lib/turnConfig';
 import { checkCliCommand } from './lib/cliCommandCheck';
 import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND } from './lib/cursorCliCommand';
 import { encryptSecret, decryptSecret } from './lib/encryptedStorage';
@@ -518,11 +518,19 @@ app.on('ready', async () => {
       });
     });
 
+    ipcMain.handle('agent:applyConfig', async (_event, chatId: number, config: TurnConfig): Promise<AgentResult> => {
+      const chat = await dbManager.getChat(chatId);
+      if (!chat) {
+        return { ok: false, provider: null, sessionId: null, message: 'Chat not found' };
+      }
+      return applyLiveConfig(chatId, config);
+    });
+
     ipcMain.handle('agent:sendTurn', async (
       event,
       chatId: number,
       sessionId: unknown,
-      config: unknown,
+      config: TurnConfig,
       text: unknown,
     ): Promise<AgentResult> => {
       const chat = await dbManager.getChat(chatId);
@@ -540,21 +548,10 @@ app.on('ready', async () => {
           message: 'Connect the database before sending messages',
         };
       }
-      let turn: TurnConfig;
-      try {
-        turn = parseTurnConfig(config);
-      } catch (error) {
-        return {
-          ok: false,
-          provider: null,
-          sessionId: null,
-          message: error instanceof Error ? error.message : String(error),
-        };
-      }
       return sendAgentTurn({
         chatId,
         sessionId: typeof sessionId === 'string' ? sessionId : '',
-        config: turn,
+        config,
         text: typeof text === 'string' ? text : '',
         onActivity: (entry) => event.sender.send('agent:activity', { chatId, entry }),
       });

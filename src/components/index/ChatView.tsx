@@ -256,12 +256,41 @@ export default function ChatView({ chatId }: ChatViewProps) {
   ])
 
 
+  const pushLiveConfig = (props: ChatProperties) => {
+    if (chatId === -1) return
+    let config: TurnConfig
+    try {
+      const built = turnConfigFromProperties(props)
+      if (!built) return
+      config = built
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+      return
+    }
+    void window.agentApi.applyConfig(chatId, config)
+      .then((result) => {
+        if (result.ok === false) {
+          toast.error(result.message)
+        }
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : String(error))
+      })
+  }
+
   const handleModelChange = (nextKey: string) => {
     const next = visibleModels.find((model) => choiceKey(model) === nextKey)
-    if (!next) return
+    if (!next || !chatProperties) return
+    const nextProps: ChatProperties = {
+      ...chatProperties,
+      model: next,
+      reasoning: next.reasoningOptions[0],
+      fast: false,
+    }
     // One atomic update: new model, its first reasoning option, fast reset.
     // sessionMode is provider-level; this patch leaves it alone.
     updateChatProperties(chatId, { model: next, reasoning: next.reasoningOptions[0], fast: false })
+    pushLiveConfig(nextProps)
   }
 
   const handleSend = async () => {
@@ -514,10 +543,11 @@ export default function ChatView({ chatId }: ChatViewProps) {
               value={chatProperties?.reasoning || undefined}
               onValueChange={(value) => {
                 const model = chatProperties?.model
-                if (!model) return
+                if (!model || !chatProperties) return
                 const option = model.reasoningOptions.find((item) => item === value)
                 if (!option) return
                 updateChatProperties(chatId, { reasoning: option })
+                pushLiveConfig({ ...chatProperties, reasoning: option })
               }}
               disabled={!chatProperties?.model || chatProperties.model.reasoningOptions.length === 0}
             >
@@ -535,7 +565,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
             {chatProperties?.model?.provider === 'opencode' ? null : (
               <Select
                 value={chatProperties?.sessionMode}
-                onValueChange={(value) => updateChatProperties(chatId, { sessionMode: parseSessionMode(value) })}
+                onValueChange={(value) => {
+                  if (!chatProperties) return
+                  const sessionMode = parseSessionMode(value)
+                  updateChatProperties(chatId, { sessionMode })
+                  pushLiveConfig({ ...chatProperties, sessionMode })
+                }}
                 disabled={!chatProperties?.model || chatProperties.model.provider !== 'cursor'}
               >
                 <SelectTrigger size="sm" className="w-28">
@@ -552,7 +587,11 @@ export default function ChatView({ chatId }: ChatViewProps) {
             )}
             {chatProperties?.model?.hasFast ? (
               <div className="flex items-center gap-2">
-                <Switch id="model-fast" checked={chatProperties?.fast ?? false} onCheckedChange={(checked) => updateChatProperties(chatId, { fast: checked })} />
+                <Switch id="model-fast" checked={chatProperties?.fast ?? false} onCheckedChange={(checked) => {
+                  if (!chatProperties) return
+                  updateChatProperties(chatId, { fast: checked })
+                  pushLiveConfig({ ...chatProperties, fast: checked })
+                }} />
                 <Label htmlFor="model-fast">Fast</Label>
               </div>
             ) : null}

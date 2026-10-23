@@ -54,6 +54,8 @@ contextBridge.exposeInMainWorld('agentApi', {
     ipcRenderer.invoke('agent:connect', chatId, sessionId) as Promise<AgentResult>,
   sendTurn: (chatId: number, sessionId: string, config: TurnConfig, text: string) =>
     ipcRenderer.invoke('agent:sendTurn', chatId, sessionId, config, text) as Promise<AgentResult>,
+  applyConfig: (chatId: number, config: TurnConfig) =>
+    ipcRenderer.invoke('agent:applyConfig', chatId, config) as Promise<AgentResult>,
   onActivity: (callback: (chatId: number, entry: ChatActivity) => void) => {
     const listener = (_event: unknown, payload: { chatId: number; entry: ChatActivity }) =>
       callback(payload.chatId, payload.entry)

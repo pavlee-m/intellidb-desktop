@@ -42,6 +42,7 @@ declare global {
         config: TurnConfig,
         text: string,
       ) => Promise<AgentResult>;
+      applyConfig: (chatId: number, config: TurnConfig) => Promise<AgentResult>;
       cancel: (chatId: number) => Promise<void>;
       onActivity: (callback: (chatId: number, entry: ChatActivity) => void) => () => void;
     };

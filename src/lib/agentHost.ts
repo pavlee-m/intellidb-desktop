@@ -6,7 +6,7 @@ import { OpenCodeClient } from '@/acp/OpenCodeClient';
 import { checkCliCommand } from '@/lib/cliCommandCheck';
 import type { CliProvider } from '@/lib/cliCommand';
 import { readOpenCodeAuth } from '@/lib/openCodeAuth';
-import type { TurnConfig } from '@/lib/turnConfig';
+import { sameTurnConfig, type TurnConfig } from '@/lib/turnConfig';
 import type * as acp from '@agentclientprotocol/sdk';
 
 export type ClaimResult =
@@ -17,6 +17,7 @@ type LiveAgent = {
   client: AgentSession | undefined;
   ready: boolean;
   provider: CliProvider;
+  applied?: TurnConfig;
 };
 
 type ConnectableSession = AgentSession & {
@@ -270,6 +271,22 @@ export async function ensureAgent(input: {
   return rememberSession(chatId, provider, spawned.client);
 }
 
+async function writeTurnIfChanged(
+  chatId: number,
+  client: AgentSession,
+  config: TurnConfig,
+): Promise<void> {
+  const agent = agents.get(chatId);
+  if (agent?.applied && sameTurnConfig(agent.applied, config)) {
+    return;
+  }
+  await client.applyTurn(config);
+  const current = agents.get(chatId);
+  if (current?.client === client) {
+    current.applied = config;
+  }
+}
+
 export async function sendAgentTurn(input: {
   chatId: number;
   sessionId: string;
@@ -286,8 +303,9 @@ export async function sendAgentTurn(input: {
   if (connected.ok === false) {
     return connected;
   }
-  const client = agents.get(input.chatId)?.client;
-  if (!client) {
+  const agent = agents.get(input.chatId);
+  const client = agent?.client;
+  if (!agent || !client) {
     return {
       ok: false,
       provider: input.config.provider,
@@ -296,7 +314,7 @@ export async function sendAgentTurn(input: {
     };
   }
   try {
-    await client.applyTurn(input.config);
+    await writeTurnIfChanged(input.chatId, client, input.config);
     await client.sendMessage(input.text);
   } catch (error) {
     return failureResult(
@@ -306,6 +324,28 @@ export async function sendAgentTurn(input: {
     );
   }
   return connected;
+}
+
+export async function applyLiveConfig(chatId: number, config: TurnConfig): Promise<AgentResult> {
+  const agent = agents.get(chatId);
+  const client = agent?.ready ? agent.client : undefined;
+  if (!agent || !client) {
+    return { ok: true, provider: config.provider, sessionId: '' };
+  }
+  if (agent.provider !== config.provider) {
+    return {
+      ok: false,
+      provider: agent.provider,
+      sessionId: client.getSessionId(),
+      message: `This chat is connected to ${agent.provider}`,
+    };
+  }
+  try {
+    await writeTurnIfChanged(chatId, client, config);
+    return { ok: true, provider: config.provider, sessionId: client.getSessionId() };
+  } catch (error) {
+    return failureResult(config.provider, liveSessionId(client), error);
+  }
 }
 
 export async function cancelRequest(chatId: number): Promise<void> {
