@@ -225,17 +225,6 @@ class DBManager {
     return { ok: false, stored: knownProvider(again.provider) };
   }
 
-  async updateChatProvider(chatId: number, provider: string): Promise<void> {
-    await this.db.run(
-      `
-        UPDATE Chat
-        SET Provider = ?
-        WHERE ID = ?;
-      `,
-      [provider, chatId],
-    );
-  }
-
   async updateChatSessionId(chatId: number, sessionId: string): Promise<void> {
     await this.db.run(
       `

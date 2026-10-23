@@ -117,7 +117,7 @@ export class CursorClient implements AgentSession {
         await this.setMode(config.mode);
     }
 
-    async applyModelChoice(choice: { modelId: string; reasoning?: string; fast: boolean }): Promise<void> {
+    private async applyModelChoice(choice: { modelId: string; reasoning?: string; fast: boolean }): Promise<void> {
         const afterModel = await this.setConfigOption("model", choice.modelId);
         const effort = (afterModel.configOptions ?? []).find((option) => {
             if (option.category !== "thought_level" || option.type !== "select") {
@@ -150,7 +150,7 @@ export class CursorClient implements AgentSession {
     }
 
 
-    async setMode(modeId: SessionMode): Promise<void> {
+    private async setMode(modeId: SessionMode): Promise<void> {
         await this.connection.agent.request(acp.methods.agent.session.setMode, {
             sessionId: this.sessionId,
             modeId,

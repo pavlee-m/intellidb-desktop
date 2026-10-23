@@ -11,10 +11,10 @@ import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
-import { ensureAgent, promptAgent, applyModelChoice, setMode, setAgentSessionPersister, setChatProviderClaim, setAgentCliResolver, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest, sendAgentTurn } from './lib/agentHost';
+import { ensureAgent, setAgentSessionPersister, setChatProviderClaim, setAgentCliResolver, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest, sendAgentTurn } from './lib/agentHost';
 import type { AgentResult } from './interfaces/AgentSession';
-import { parseSessionMode } from './interfaces/SessionMode';
 import { fetchCursorModels } from './lib/modelFetching';
+import { fetchOpenCodeModels } from './lib/openCodeModels';
 import { getProviderCliCommand } from './lib/cliCommand';
 import { parseCliProvider, parseTurnConfig, type TurnConfig } from './lib/turnConfig';
 import { checkCliCommand } from './lib/cliCommandCheck';
@@ -478,28 +478,19 @@ app.on('ready', async () => {
       disposeAgent(chatId);
     });
 
-    ipcMain.handle('chats:setProvider', async (_event, chatId: number, provider: string) => {
-      await dbManager.updateChatProvider(chatId, provider);
-    });
-
-    ipcMain.handle('models:cursor', async () => {
+    ipcMain.handle('models:list', async (_event, provider: unknown) => {
+      const parsed = parseCliProvider(provider);
       const loaded = await dbManager.getSettings();
-      if (!loaded.cursor_cli_integration_enabled) {
+      if (parsed === 'cursor') {
+        if (!loaded.cursor_cli_integration_enabled) {
+          return [];
+        }
+        return fetchCursorModels(await dbManager.getCursorCliCommand());
+      }
+      if (!loaded.opencode_integration_enabled) {
         return [];
       }
-      return fetchCursorModels(await dbManager.getCursorCliCommand());
-    });
-
-    ipcMain.handle('agent:applyModel', async (
-      _event,
-      chatId: number,
-      choice: { modelId: string; reasoning?: string; fast: boolean },
-    ) => {
-      await applyModelChoice(chatId, choice);
-    });
-
-    ipcMain.handle('agent:setSessionMode', async (_event, chatId: number, mode: unknown) => {
-      await setMode(chatId, parseSessionMode(mode))
+      return fetchOpenCodeModels(getProviderCliCommand('opencode', loaded));
     });
 
     // Give the agent host a method to persist the session id to the database.
@@ -575,20 +566,6 @@ app.on('ready', async () => {
         throw new Error('Chat not found');
       }
       return cancelRequest(chatId);
-    });
-
-    ipcMain.handle('agent:prompt', async (_event, chatId: number, text: string) => {
-      const chat = await dbManager.getChat(chatId);
-      if (!chat) {
-        throw new Error('Chat not found');
-      }
-      const existingConnection = connections.find(
-        ({ connection }) => connection.id === chat.connectionId,
-      );
-      if (!existingConnection || !existingConnection.backendConnectionId) {
-        throw new Error('Connect the database before sending messages');
-      }
-      return promptAgent(chatId, text);
     });
 
     ipcMain.handle('settings:update', async (_event, key: string, value: string) => {

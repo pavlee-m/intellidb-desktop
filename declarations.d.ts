@@ -5,7 +5,9 @@ type Chat = import('./src/interfaces/Chat').default;
 type ChatActivity = import('./src/interfaces/ChatActivity').default;
 type Model = import('./src/interfaces/Model').Model;
 type CliCommandCheckResult = import('./src/lib/cliCommand').CliCommandCheckResult;
-type SessionMode = import('./src/interfaces/SessionMode').SessionMode;
+type CliProvider = import('./src/lib/cliCommand').CliProvider;
+type AgentResult = import('./src/interfaces/AgentSession').AgentResult;
+type TurnConfig = import('./src/lib/turnConfig').TurnConfig;
 
 declare global {
   interface Window {
@@ -28,20 +30,19 @@ declare global {
       addChat: (connectionId: number) => Promise<Chat>;
       renameChat: (chatId: number, name: string) => Promise<void>;
       deleteChat: (chatId: number) => Promise<void>;
-      setProvider: (chatId: number, provider: string) => Promise<void>;
     };
     modelsApi: {
-      listCursor: () => Promise<Model[]>;
+      list: (provider: CliProvider) => Promise<Model[]>;
     };
     agentApi: {
-      connect: (chatId: number, sessionId: string | null) => Promise<string>;
-      prompt: (chatId: number, text: string) => Promise<unknown>;
-      cancel: (chatId: number) => Promise<void>;
-      applyModel: (
+      connect: (chatId: number, sessionId: string) => Promise<AgentResult>;
+      sendTurn: (
         chatId: number,
-        choice: { modelId: string; reasoning?: string; fast: boolean },
-      ) => Promise<void>;
-      setSessionMode: (chatId: number, mode: SessionMode) => Promise<void>;
+        sessionId: string,
+        config: TurnConfig,
+        text: string,
+      ) => Promise<AgentResult>;
+      cancel: (chatId: number) => Promise<void>;
       onActivity: (callback: (chatId: number, entry: ChatActivity) => void) => () => void;
     };
   }

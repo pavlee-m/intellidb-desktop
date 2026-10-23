@@ -5,8 +5,9 @@ import Connection from '@/interfaces/Connection'
 import BackendConnection from './interfaces/BackendConnection'
 import type ChatActivity from '@/interfaces/ChatActivity'
 import type { Model } from '@/interfaces/Model'
-import type { CliCommandCheckResult } from '@/lib/cliCommand'
-import type { SessionMode } from '@/interfaces/SessionMode'
+import type { CliCommandCheckResult, CliProvider } from '@/lib/cliCommand'
+import type { AgentResult } from '@/interfaces/AgentSession'
+import type { TurnConfig } from '@/lib/turnConfig'
 
 contextBridge.exposeInMainWorld('settingsApi', {
   getSettings: () => ipcRenderer.invoke('settings:get') as Promise<Settings>,
@@ -41,19 +42,18 @@ contextBridge.exposeInMainWorld('chatsApi', {
     ipcRenderer.invoke('chats:rename', chatId, name) as Promise<void>,
   deleteChat: (chatId: number) =>
     ipcRenderer.invoke('chats:delete', chatId) as Promise<void>,
-  setProvider: (chatId: number, provider: string) =>
-    ipcRenderer.invoke('chats:setProvider', chatId, provider) as Promise<void>,
 })
 
 contextBridge.exposeInMainWorld('modelsApi', {
-  listCursor: () => ipcRenderer.invoke('models:cursor') as Promise<Model[]>,
+  list: (provider: CliProvider) =>
+    ipcRenderer.invoke('models:list', provider) as Promise<Model[]>,
 })
 
 contextBridge.exposeInMainWorld('agentApi', {
   connect: (chatId: number, sessionId: string) =>
-    ipcRenderer.invoke('agent:connect', chatId, sessionId) as Promise<string>,
-  prompt: (chatId: number, text: string) =>
-    ipcRenderer.invoke('agent:prompt', chatId, text) as Promise<unknown>,
+    ipcRenderer.invoke('agent:connect', chatId, sessionId) as Promise<AgentResult>,
+  sendTurn: (chatId: number, sessionId: string, config: TurnConfig, text: string) =>
+    ipcRenderer.invoke('agent:sendTurn', chatId, sessionId, config, text) as Promise<AgentResult>,
   onActivity: (callback: (chatId: number, entry: ChatActivity) => void) => {
     const listener = (_event: unknown, payload: { chatId: number; entry: ChatActivity }) =>
       callback(payload.chatId, payload.entry)
@@ -64,10 +64,4 @@ contextBridge.exposeInMainWorld('agentApi', {
   },
   cancel: (chatId: number) =>
     ipcRenderer.invoke('agent:cancel', chatId) as Promise<void>,
-  applyModel: (
-    chatId: number,
-    choice: { modelId: string; reasoning?: string; fast: boolean },
-  ) => ipcRenderer.invoke('agent:applyModel', chatId, choice) as Promise<void>,
-  setSessionMode: (chatId: number, mode: SessionMode) =>
-    ipcRenderer.invoke('agent:setSessionMode', chatId, mode) as Promise<void>,
 })

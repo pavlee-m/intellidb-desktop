@@ -1,7 +1,6 @@
 import ChatActivity from '@/interfaces/ChatActivity';
 import ACPClientHandlers from '@/interfaces/ACPClientHandlers';
 import type { AgentResult, AgentSession } from '@/interfaces/AgentSession';
-import type { SessionMode } from '@/interfaces/SessionMode';
 import { CursorClient } from '@/acp/CursorClient';
 import { OpenCodeClient } from '@/acp/OpenCodeClient';
 import { checkCliCommand } from '@/lib/cliCommandCheck';
@@ -309,25 +308,6 @@ export async function sendAgentTurn(input: {
   return connected;
 }
 
-export async function applyModelChoice(
-  chatId: number,
-  choice: { modelId: string; reasoning?: string; fast: boolean },
-): Promise<void> {
-  const client = agents.get(chatId)?.client;
-  if (!(client instanceof CursorClient)) {
-    throw new Error('Agent is not connected');
-  }
-  await client.applyModelChoice(choice);
-}
-
-export async function setMode(chatId: number, mode: SessionMode): Promise<void> {
-  const client = agents.get(chatId)?.client;
-  if (!(client instanceof CursorClient)) {
-    throw new Error('Agent is not connected');
-  }
-  await client.setMode(mode);
-}
-
 export async function cancelRequest(chatId: number): Promise<void> {
   const agent = agents.get(chatId);
   if (!agent) {
@@ -353,13 +333,3 @@ export function disposeAgent(chatId: number): void {
     }
 }
 
-export async function promptAgent(chatId: number, text: string): Promise<unknown> {
-  const agent = agents.get(chatId);
-  if (!agent) {
-    throw new Error('Agent is not connected');
-  }
-  if (!agent.ready) {
-    throw new Error('Agent is not ready');
-  }
-  return await agent.client?.sendMessage(text);
-}

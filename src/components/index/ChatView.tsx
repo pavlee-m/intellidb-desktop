@@ -32,13 +32,11 @@ import useGlobalStore from '@/stores/globalStore'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import useModelsStore from '@/stores/modelsStore'
 import { Spinner } from '@/components/ui/spinner'
-import {
-  OPENCODE_STUB_MODELS,
-} from '@/lib/opencodeStubModels'
 import { getProviderCliCommand, type CliProvider } from '@/lib/cliCommand'
 import { useProviderReadiness } from '@/lib/providerReadiness'
 import { deriveInitialChatTitle } from '@/lib/chatTitle'
-import type { Model, ReasoningOption } from '@/interfaces/Model'
+import type { Model } from '@/interfaces/Model'
+import { turnConfigFromProperties, type TurnConfig } from '@/lib/turnConfig'
 import useSettingsStore from '@/stores/settingsStore'
 
 function choiceKey(model: Model): string {
@@ -159,10 +157,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
   // Memoized so `visibleModels` stays referentially stable; otherwise the
   // properties-init effect below would run after every render.
   const visibleModels = useMemo(() => {
-    const catalog: Model[] = [
-      ...(settings?.cursor_cli_integration_enabled ? allModels : []),
-      ...(settings?.opencode_integration_enabled ? OPENCODE_STUB_MODELS : []),
-    ]
+    const catalog = allModels.filter((model) => {
+      if (model.provider === 'cursor') {
+        return Boolean(settings?.cursor_cli_integration_enabled)
+      }
+      return Boolean(settings?.opencode_integration_enabled)
+    })
     return lockedProvider
       ? catalog.filter((model) => model.provider === lockedProvider)
       : catalog
@@ -213,48 +213,47 @@ export default function ChatView({ chatId }: ChatViewProps) {
     }
   }, [currentChat?.id, isConnectionOnline])
 
+  const loadGeneration = useRef(0)
   const loadModels = async () => {
-    // Load cursor models
-    try{
-      const cursorModels = await window.modelsApi.listCursor()
-      const opencodeModels = OPENCODE_STUB_MODELS
-      const allModels: Model[] = []
-      for (const model of cursorModels) {
-        if (model.provider !== 'cursor') {
-          continue
-        }
-        allModels.push({
-          provider: 'cursor',
-          id: model.id,
-          name: model.name,
-          reasoningOptions: [...model.reasoningOptions],
-          hasFast: model.hasFast,
-        })
-      }
-      for (const model of opencodeModels) {
-        allModels.push({
-          provider: 'opencode',
-          id: model.id,
-          name: model.name,
-          reasoningOptions: [...model.reasoningOptions],
-          hasFast: model.hasFast,
-        })
-      }
-      setAllModels(allModels)
+    const generation = loadGeneration.current + 1
+    loadGeneration.current = generation
+    const loaded = settings ?? await window.settingsApi.getSettings()
+    if (!settings) {
+      setSettings(loaded)
     }
-    catch (error) {
-      if (!providerBlocked) {
+    const previous = useModelsStore.getState().models
+    let cursorModels: Model[] = []
+    let opencodeModels: Model[] = []
+    if (loaded.cursor_cli_integration_enabled) {
+      try {
+        cursorModels = await window.modelsApi.list('cursor')
+      } catch (error) {
         toast.error(error instanceof Error ? error.message : String(error))
+        cursorModels = previous.filter((model) => model.provider === 'cursor')
       }
     }
+    if (loaded.opencode_integration_enabled) {
+      try {
+        opencodeModels = await window.modelsApi.list('opencode')
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error))
+        opencodeModels = previous.filter((model) => model.provider === 'opencode')
+      }
+    }
+    if (generation !== loadGeneration.current) {
+      return
+    }
+    setAllModels([...cursorModels, ...opencodeModels])
   }
 
   useEffect(() => {
-    if (allModels.length === 0) {
-      // try loading models
-      loadModels()
-    }
-  }, [chatId, settings])
+    void loadModels()
+  }, [
+    settings?.cursor_cli_integration_enabled,
+    settings?.opencode_integration_enabled,
+    settings?.cursor_cli_binary,
+    settings?.opencode_binary,
+  ])
 
 
   const handleModelChange = (nextKey: string) => {
@@ -277,13 +276,25 @@ export default function ChatView({ chatId }: ChatViewProps) {
       // component re-renders for the new chatId, but this closure keeps
       // operating on the selection made for the placeholder chat.
       const props = chatProperties
-      if (currentChat && currentChat.id === -1) {
-        if (!props?.model) {
+      if (!props) {
+        toast.error('Select a model before sending')
+        return
+      }
+      let config: TurnConfig
+      try {
+        const built = turnConfigFromProperties(props)
+        if (!built) {
           toast.error('Select a model before sending')
           return
         }
+        config = built
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error))
+        return
+      }
+      if (currentChat && currentChat.id === -1) {
         const loadedSettings = settings ?? await window.settingsApi.getSettings()
-        const command = getProviderCliCommand(props.model.provider, loadedSettings)
+        const command = getProviderCliCommand(config.provider, loadedSettings)
         try {
           const check = await window.settingsApi.checkCliCommand(command)
           if (check.ok === false) {
@@ -295,10 +306,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
           return
         }
       }
-      if (props?.model?.provider === 'opencode') {
-        toast.error('OpenCode is not connected yet')
-        return
-      }
 
       let chat = currentChat
       if (chat && chat.id === -1) {
@@ -309,9 +316,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
         removeChat(newChat.connectionId, -1)
         deleteChatProperties(-1)
         // Dropping the snapshot would snap a Plan pick back to Agent on the next send.
-        if (props) setChatProperties(newChat.id, props)
+        setChatProperties(newChat.id, props)
         openChat(newChat.id)
-        await handleAgentConnect(newChat)
         const initialTitle = deriveInitialChatTitle(text)
         await window.chatsApi.renameChat(newChat.id, initialTitle)
         renameChat(newChat.connectionId, newChat.id, initialTitle)
@@ -323,20 +329,16 @@ export default function ChatView({ chatId }: ChatViewProps) {
       setInput('')
       pushUserMessage(chat.id, text)
       try {
-        if (props?.model && !chat.provider) {
-          await window.chatsApi.setProvider(chat.id, props.model.provider)
-          setProvider(chat.connectionId, chat.id, props.model.provider)
+        setProvider(chat.connectionId, chat.id, config.provider)
+        const promptText = `dangerousQueries: ${props.dangerousQueries ?? false}\nconnectionId: ${backendConnectionId ?? 'unknown'}\n${text}`
+        const sent = await window.agentApi.sendTurn(chat.id, chat.sessionId ?? '', config, promptText)
+        setProvider(chat.connectionId, chat.id, sent.provider ?? '')
+        if (sent.sessionId) {
+          setSessionId(chat.connectionId, chat.id, sent.sessionId)
         }
-        if (props?.model?.provider === 'cursor' && props.model) {
-          await window.agentApi.applyModel(chat.id, {
-            modelId: props.model.id,
-            reasoning: props.reasoning,
-            fast: props.model.hasFast && props.fast === true,
-          })
-          await window.agentApi.setSessionMode(chat.id, props.sessionMode ?? 'agent')
+        if (sent.ok === false) {
+          toast.error(sent.message)
         }
-        const agentQuery = `dangerousQueries: ${props?.dangerousQueries ?? false}\nconnectionId: ${backendConnectionId ?? 'unknown'}\n${text}`;
-        await window.agentApi.prompt(chat.id, agentQuery)
       } catch (error) {
         toast.error(error instanceof Error ? error.message : String(error))
       } finally {
@@ -371,10 +373,19 @@ export default function ChatView({ chatId }: ChatViewProps) {
   }
 
   const handleAgentConnect = (chat: Chat) => {
-    return window.agentApi.connect(chat.id, chat.sessionId)
-      .then((sessionId) => {
-        if (sessionId) {
-          setSessionId(chat.connectionId, chat.id, sessionId)
+    if (chat.provider !== 'cursor' && chat.provider !== 'opencode') {
+      return
+    }
+    return window.agentApi.connect(chat.id, chat.sessionId ?? '')
+      .then((connected) => {
+        if (connected.provider) {
+          setProvider(chat.connectionId, chat.id, connected.provider)
+        }
+        if (connected.sessionId) {
+          setSessionId(chat.connectionId, chat.id, connected.sessionId)
+        }
+        if (connected.ok === false) {
+          toast.error(connected.message)
         }
         if (chat.id === -1) {
           setWaitForInitialActivity(false)
@@ -501,7 +512,13 @@ export default function ChatView({ chatId }: ChatViewProps) {
             </Select>
             <Select
               value={chatProperties?.reasoning || undefined}
-              onValueChange={(value) => updateChatProperties(chatId, { reasoning: value as ReasoningOption })}
+              onValueChange={(value) => {
+                const model = chatProperties?.model
+                if (!model) return
+                const option = model.reasoningOptions.find((item) => item === value)
+                if (!option) return
+                updateChatProperties(chatId, { reasoning: option })
+              }}
               disabled={!chatProperties?.model || chatProperties.model.reasoningOptions.length === 0}
             >
               <SelectTrigger size="sm" className="w-32">
@@ -515,22 +532,24 @@ export default function ChatView({ chatId }: ChatViewProps) {
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              value={chatProperties?.sessionMode}
-              onValueChange={(value) => updateChatProperties(chatId, { sessionMode: parseSessionMode(value) })}
-              disabled={!chatProperties?.model || chatProperties.model.provider !== 'cursor'}
-            >
-              <SelectTrigger size="sm" className="w-28">
-                <SelectValue placeholder="Mode" />
-              </SelectTrigger>
-              <SelectContent>
-                {SESSION_MODE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {chatProperties?.model?.provider === 'opencode' ? null : (
+              <Select
+                value={chatProperties?.sessionMode}
+                onValueChange={(value) => updateChatProperties(chatId, { sessionMode: parseSessionMode(value) })}
+                disabled={!chatProperties?.model || chatProperties.model.provider !== 'cursor'}
+              >
+                <SelectTrigger size="sm" className="w-28">
+                  <SelectValue placeholder="Mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SESSION_MODE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {chatProperties?.model?.hasFast ? (
               <div className="flex items-center gap-2">
                 <Switch id="model-fast" checked={chatProperties?.fast ?? false} onCheckedChange={(checked) => updateChatProperties(chatId, { fast: checked })} />
