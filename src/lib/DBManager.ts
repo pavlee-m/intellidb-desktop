@@ -13,11 +13,17 @@ type ConnectionRow = Omit<Connection, 'sqlalchemy_query'> & {
   sqlalchemy_query: string | null;
 };
 
-function knownProvider(value: string): CliProvider | null {
+function knownProvider(value: string | null): CliProvider | null {
   if (value === 'cursor' || value === 'opencode') {
     return value;
   }
   return null;
+}
+
+// A missing provider is NULL on databases whose Provider column was added
+// without a default, and '' after the backfill below. Both mean unclaimed.
+function isUnclaimed(value: string | null): boolean {
+  return value === null || value === '';
 }
 
 class DBManager {
@@ -136,8 +142,8 @@ class DBManager {
   async addChat(connectionId: number, name: string): Promise<Chat> {
     const result = await this.db.run(
       `
-        INSERT INTO Chat (ConnectionID, Name, SessionID)
-        VALUES (?, ?, '');
+        INSERT INTO Chat (ConnectionID, Name, SessionID, Provider)
+        VALUES (?, ?, '', '');
       `,
       [connectionId, name],
     );
@@ -162,21 +168,24 @@ class DBManager {
 
   async ensureChatProviderColumn(): Promise<void> {
     const columns = await this.db.all<{ name: string }[]>(`PRAGMA table_info(Chat)`);
-    if (columns.some((column) => column.name === 'Provider')) {
-      return;
+    if (!columns.some((column) => column.name === 'Provider')) {
+      await this.db.exec(`ALTER TABLE Chat ADD COLUMN Provider TEXT NOT NULL DEFAULT ''`);
     }
 
-    await this.db.exec(`ALTER TABLE Chat ADD COLUMN Provider TEXT NOT NULL DEFAULT ''`);
     // Chats that already have a session were opened through Cursor. New chats stay unset.
+    // NULL and '' are both unclaimed. Older databases stored NULL because the column
+    // had no default, and a claim compared that NULL to '' and reported the chat missing.
     await this.db.run(`
       UPDATE Chat
       SET Provider = 'cursor'
-      WHERE SessionID IS NOT NULL AND SessionID != '';
+      WHERE (Provider IS NULL OR Provider = '')
+        AND SessionID IS NOT NULL AND SessionID != '';
     `);
+    await this.db.run(`UPDATE Chat SET Provider = '' WHERE Provider IS NULL`);
   }
 
   async claimChatProvider(chatId: number, provider: CliProvider): Promise<ClaimResult> {
-    const row = await this.db.get<{ provider: string }>(
+    const row = await this.db.get<{ provider: string | null }>(
       `
         SELECT Provider AS provider
         FROM Chat
@@ -190,9 +199,8 @@ class DBManager {
     if (row.provider === provider) {
       return { ok: true };
     }
-    const stored = knownProvider(row.provider);
-    if (row.provider !== '') {
-      return { ok: false, stored };
+    if (!isUnclaimed(row.provider)) {
+      return { ok: false, stored: knownProvider(row.provider) };
     }
 
     // A second send can write the provider between the read above and this update.
@@ -200,7 +208,7 @@ class DBManager {
       `
         UPDATE Chat
         SET Provider = ?
-        WHERE ID = ? AND Provider = '';
+        WHERE ID = ? AND (Provider IS NULL OR Provider = '');
       `,
       [provider, chatId],
     );
@@ -208,7 +216,7 @@ class DBManager {
       return { ok: true };
     }
 
-    const again = await this.db.get<{ provider: string }>(
+    const again = await this.db.get<{ provider: string | null }>(
       `
         SELECT Provider AS provider
         FROM Chat
