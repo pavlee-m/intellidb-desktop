@@ -6,6 +6,7 @@ import BackendConnection from './interfaces/BackendConnection'
 import type ChatActivity from '@/interfaces/ChatActivity'
 import type Model from '@/interfaces/Model'
 import type { CliCommandCheckResult } from '@/lib/cliCommand'
+import type { SessionMode } from '@/interfaces/SessionMode'
 
 contextBridge.exposeInMainWorld('settingsApi', {
   getSettings: () => ipcRenderer.invoke('settings:get') as Promise<Settings>,
@@ -67,4 +68,6 @@ contextBridge.exposeInMainWorld('agentApi', {
     chatId: number,
     choice: { modelId: string; reasoning?: string; fast: boolean },
   ) => ipcRenderer.invoke('agent:applyModel', chatId, choice) as Promise<void>,
+  setSessionMode: (chatId: number, mode: SessionMode) =>
+    ipcRenderer.invoke('agent:setSessionMode', chatId, mode) as Promise<void>,
 })

@@ -11,7 +11,8 @@ import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
-import { ensureAgent, promptAgent, applyModelChoice, setAgentSessionPersister, setCursorCliCommandProvider, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest } from './lib/agentHost';
+import { ensureAgent, promptAgent, applyModelChoice, setMode, setAgentSessionPersister, setCursorCliCommandProvider, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest } from './lib/agentHost';
+import { parseSessionMode } from './interfaces/SessionMode';
 import { fetchCursorModels } from './lib/modelFetching';
 import { checkCliCommand } from './lib/cliCommandCheck';
 import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND } from './lib/cursorCliCommand';
@@ -492,6 +493,10 @@ app.on('ready', async () => {
       choice: { modelId: string; reasoning?: string; fast: boolean },
     ) => {
       await applyModelChoice(chatId, choice);
+    });
+
+    ipcMain.handle('agent:setSessionMode', async (_event, chatId: number, mode: unknown) => {
+      await setMode(chatId, parseSessionMode(mode))
     });
 
     // Give the agent host a method to persist the session id to the database.

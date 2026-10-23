@@ -5,6 +5,7 @@ type Chat = import('./src/interfaces/Chat').default;
 type ChatActivity = import('./src/interfaces/ChatActivity').default;
 type Model = import('./src/interfaces/Model').default;
 type CliCommandCheckResult = import('./src/lib/cliCommand').CliCommandCheckResult;
+type SessionMode = import('./src/interfaces/SessionMode').SessionMode;
 
 declare global {
   interface Window {
@@ -40,6 +41,7 @@ declare global {
         chatId: number,
         choice: { modelId: string; reasoning?: string; fast: boolean },
       ) => Promise<void>;
+      setSessionMode: (chatId: number, mode: SessionMode) => Promise<void>;
       onActivity: (callback: (chatId: number, entry: ChatActivity) => void) => () => void;
     };
   }

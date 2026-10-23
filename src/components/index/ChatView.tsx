@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/tooltip'
 import Chat from '@/interfaces/Chat'
 import { ChatProperties } from '@/interfaces/ChatProperties'
+import { parseSessionMode, SESSION_MODE_OPTIONS } from '@/interfaces/SessionMode'
 import useChatStore from '@/stores/chatStore'
 import useGlobalStore from '@/stores/globalStore'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
@@ -175,6 +176,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
           reasoning: model.reasoningOptions[0],
           fast: false,
           dangerousQueries: false,
+          sessionMode: 'agent',
       }
   }
 
@@ -256,6 +258,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     const next = visibleModels.find((model) => choiceKey(model) === nextKey)
     if (!next) return
     // One atomic update: new model, its first reasoning option, fast reset.
+    // sessionMode is provider-level; this patch leaves it alone.
     updateChatProperties(chatId, { model: next, reasoning: next.reasoningOptions[0], fast: false })
   }
 
@@ -301,7 +304,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
         // Swap the -1 placeholder for the persisted chat: drop the placeholder,
         // select the real one, and keep using it for the rest of this send.
         removeChat(newChat.connectionId, -1)
-        deleteChatProperties(-1);
+        deleteChatProperties(-1)
+        // Dropping the snapshot would snap a Plan pick back to Agent on the next send.
+        if (props) setChatProperties(newChat.id, props)
         openChat(newChat.id)
         await handleAgentConnect(newChat)
         const initialTitle = deriveInitialChatTitle(text)
@@ -325,6 +330,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
             reasoning: props.reasoning,
             fast: props.model.hasFast && props.fast === true,
           })
+          await window.agentApi.setSessionMode(chat.id, props.sessionMode ?? 'agent')
         }
         const agentQuery = `dangerousQueries: ${props?.dangerousQueries ?? false}\nconnectionId: ${backendConnectionId ?? 'unknown'}\n${text}`;
         await window.agentApi.prompt(chat.id, agentQuery)
@@ -502,6 +508,22 @@ export default function ChatView({ chatId }: ChatViewProps) {
                 {chatProperties?.model?.reasoningOptions.map((option) => (
                   <SelectItem key={option} value={option}>
                     {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={chatProperties?.sessionMode}
+              onValueChange={(value) => updateChatProperties(chatId, { sessionMode: parseSessionMode(value) })}
+              disabled={!chatProperties?.model || chatProperties.model.provider !== 'cursor'}
+            >
+              <SelectTrigger size="sm" className="w-28">
+                <SelectValue placeholder="Mode" />
+              </SelectTrigger>
+              <SelectContent>
+                {SESSION_MODE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
                   </SelectItem>
                 ))}
               </SelectContent>

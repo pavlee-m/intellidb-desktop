@@ -1,5 +1,6 @@
 import ACPClientHandlers from "../interfaces/ACPClientHandlers";
 import ProviderClient from "../interfaces/ProviderClient";
+import type { SessionMode } from "../interfaces/SessionMode";
 import type { CursorCliCommand } from "../lib/cursorCliCommand";
 import * as acp from "@agentclientprotocol/sdk";
 import { ChildProcess, spawn } from "node:child_process";
@@ -136,7 +137,7 @@ export class CursorClient implements ProviderClient {
     }
 
 
-    async setMode(modeId: string): Promise<void> {
+    async setMode(modeId: SessionMode): Promise<void> {
         await this.connection.agent.request(acp.methods.agent.session.setMode, {
             sessionId: this.sessionId,
             modeId,

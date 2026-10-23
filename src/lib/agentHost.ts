@@ -1,6 +1,7 @@
 import ChatActivity from '@/interfaces/ChatActivity';
 import ACPClientHandlers from '@/interfaces/ACPClientHandlers';
 import ProviderClient from '@/interfaces/ProviderClient';
+import type { SessionMode } from '@/interfaces/SessionMode';
 import { CursorClient } from '@/acp/CursorClient';
 import type { CursorCliCommand } from '@/lib/cursorCliCommand';
 import { checkCliCommand } from '@/lib/cliCommandCheck';
@@ -180,7 +181,7 @@ export async function applyModelChoice(
   await agent.client.applyModelChoice(choice);
 }
 
-export async function setMode(chatId: number, mode: string): Promise<void> {
+export async function setMode(chatId: number, mode: SessionMode): Promise<void> {
   const agent = agents.get(chatId);
   if (!agent?.client) {
     throw new Error('Agent is not connected');
