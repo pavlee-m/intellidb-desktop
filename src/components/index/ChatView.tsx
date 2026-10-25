@@ -24,7 +24,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import Chat from '@/interfaces/Chat'
+import ChatModel from '@/models/ChatModel'
 import { ChatProperties } from '@/interfaces/ChatProperties'
 import { parseSessionMode, SESSION_MODE_OPTIONS } from '@/interfaces/SessionMode'
 import useChatStore from '@/stores/chatStore'
@@ -94,7 +94,7 @@ function ActivityEntry({ entry }: { entry: ChatActivity }) {
 export default function ChatView({ chatId }: ChatViewProps) {
   // chatsByConnection is keyed by connectionId, so we can't index by chatId;
   // scan the values and match on chat.id instead.
-  const currentChat: Chat | undefined = useChatStore((state) =>
+  const currentChat: ChatModel | undefined = useChatStore((state) =>
     Object.values(state.chatsByConnection)
       .flat()
       .find((chat) => chat.id === chatId),
@@ -388,7 +388,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     setIsSending(false);
   }
 
-  const createChat = async (connectionId: number): Promise<Chat | null> => {
+  const createChat = async (connectionId: number): Promise<ChatModel | null> => {
     try {
       const chat = await window.chatsApi.addChat(connectionId)
       addChat(connectionId, chat)
@@ -401,7 +401,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
     }
   }
 
-  const handleAgentConnect = (chat: Chat) => {
+  const handleAgentConnect = (chat: ChatModel) => {
     if (chat.provider !== 'cursor' && chat.provider !== 'opencode') {
       return
     }

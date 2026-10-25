@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type Chat from '@/interfaces/Chat'
+import type ChatModel from '@/models/ChatModel'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -13,7 +13,7 @@ import {
 import { Input } from '@/components/ui/input'
 
 interface RenameChatDialogProps {
-  chat: Chat | null
+  chat: ChatModel | null
   onOpenChange: (open: boolean) => void
   onSubmit: (name: string) => Promise<void>
 }

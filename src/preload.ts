@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import Settings from '@/interfaces/Settings'
-import Chat from '@/interfaces/Chat'
+import ChatModel from '@/models/ChatModel'
 import Connection from '@/interfaces/Connection'
 import BackendConnection from './interfaces/BackendConnection'
 import type ChatActivity from '@/interfaces/ChatActivity'
@@ -35,9 +35,9 @@ contextBridge.exposeInMainWorld('connectionsApi', {
 
 contextBridge.exposeInMainWorld('chatsApi', {
   getChats: (connectionId: number) =>
-    ipcRenderer.invoke('chats:get', connectionId) as Promise<Chat[]>,
+    ipcRenderer.invoke('chats:get', connectionId) as Promise<ChatModel[]>,
   addChat: (connectionId: number) =>
-    ipcRenderer.invoke('chats:add', connectionId) as Promise<Chat>,
+    ipcRenderer.invoke('chats:add', connectionId) as Promise<ChatModel>,
   renameChat: (chatId: number, name: string) =>
     ipcRenderer.invoke('chats:rename', chatId, name) as Promise<void>,
   deleteChat: (chatId: number) =>

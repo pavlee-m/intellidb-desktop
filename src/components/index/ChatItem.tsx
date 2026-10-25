@@ -1,5 +1,5 @@
 import { CircleQuestionMark } from 'lucide-react'
-import type Chat from '@/interfaces/Chat'
+import type ChatModel from '@/models/ChatModel'
 import type { CliProvider } from '@/lib/cliCommand'
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import cursorLogo from '@/assets/cursor.svg'
@@ -23,10 +23,10 @@ function lookupProviderIcon(provider: string) {
 }
 
 interface ChatItemProps {
-  chat: Chat
-  onSelect: (chat: Chat) => void
-  onRename: (chat: Chat) => void
-  onDelete: (chat: Chat) => void
+  chat: ChatModel
+  onSelect: (chat: ChatModel) => void
+  onRename: (chat: ChatModel) => void
+  onDelete: (chat: ChatModel) => void
 }
 
 export default function ChatItem({ chat, onSelect, onRename, onDelete }: ChatItemProps) {

@@ -20,7 +20,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { useEffect, useMemo, useState } from 'react'
-import type Chat from '@/interfaces/Chat'
+import type ChatModel from '@/models/ChatModel'
 import type Connection from '@/interfaces/Connection'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import useChatStore from '@/stores/chatStore'
@@ -76,8 +76,8 @@ function Index() {
   const [connectionPendingDelete, setConnectionPendingDelete] = useState<Connection | null>(null)
   const [isDeletingConnection, setIsDeletingConnection] = useState(false)
   const [connectionPendingEdit, setConnectionPendingEdit] = useState<Connection | null>(null)
-  const [chatPendingRename, setChatPendingRename] = useState<Chat | null>(null)
-  const [chatPendingDelete, setChatPendingDelete] = useState<Chat | null>(null)
+  const [chatPendingRename, setChatPendingRename] = useState<ChatModel | null>(null)
+  const [chatPendingDelete, setChatPendingDelete] = useState<ChatModel | null>(null)
   const [isDeletingChat, setIsDeletingChat] = useState(false)
   const applyAgentUpdate = useChatActivityStore((state) => state.applyAgentUpdate)
   const settings = useSettingsStore((state) => state.settings)
@@ -236,7 +236,7 @@ function Index() {
     })
   }
 
-  const handleChatSelect = async (chat: Chat) => {
+  const handleChatSelect = async (chat: ChatModel) => {
     console.log('handleChatSelect', chat.id)
     // A chat that already has a provider can only resume with its provider
     // integration enabled and its CLI executable present, so check readiness

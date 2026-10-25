@@ -1,10 +1,10 @@
-import Chat from "./Chat"
+import ChatModel from "@/models/ChatModel"
 
 export default interface ChatState {
   // Missing key: never loaded. Present key (including []): loaded.
-  chatsByConnection: Record<number, Chat[]>
-  addChat: (connectionId: number, chat: Chat) => void
-  setChats: (connectionId: number, chats: Chat[]) => void
+  chatsByConnection: Record<number, ChatModel[]>
+  addChat: (connectionId: number, chat: ChatModel) => void
+  setChats: (connectionId: number, chats: ChatModel[]) => void
   renameChat: (connectionId: number, chatId: number, name: string) => void
   removeChat: (connectionId: number, chatId: number) => void
   setSessionId: (connectionId: number, chatId: number, sessionId: string) => void

@@ -1,4 +1,4 @@
-import type Chat from '@/interfaces/Chat'
+import type ChatModel from '@/models/ChatModel'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 
 interface DeleteChatDialogProps {
-  chat: Chat | null
+  chat: ChatModel | null
   isDeleting: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: () => void

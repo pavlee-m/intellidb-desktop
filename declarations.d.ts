@@ -1,7 +1,7 @@
 type BackendConnection = import('./src/interfaces/BackendConnection').default;
 type Settings = import('./src/interfaces/Settings').default;
 type Connection = import('./src/interfaces/Connection').default;
-type Chat = import('./src/interfaces/Chat').default;
+type ChatModel = import('./src/models/ChatModel').default;
 type ChatActivity = import('./src/interfaces/ChatActivity').default;
 type Model = import('./src/interfaces/Model').Model;
 type CliCommandCheckResult = import('./src/lib/cliCommand').CliCommandCheckResult;
@@ -26,8 +26,8 @@ declare global {
       getPassword: (connectionId: number) => Promise<string>;
     };
     chatsApi: {
-      getChats: (connectionId: number) => Promise<Chat[]>;
-      addChat: (connectionId: number) => Promise<Chat>;
+      getChats: (connectionId: number) => Promise<ChatModel[]>;
+      addChat: (connectionId: number) => Promise<ChatModel>;
       renameChat: (chatId: number, name: string) => Promise<void>;
       deleteChat: (chatId: number) => Promise<void>;
     };

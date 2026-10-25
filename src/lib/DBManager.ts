@@ -5,7 +5,6 @@ import { CURSOR_CLI_BINARY_KEY, parseCursorCliCommand, type CursorCliCommand } f
 import { DEFAULT_SQLMCP_PORT, parseSqlmcpPort } from '@/lib/sqlmcpPort';
 import SettingsModel from '../models/SettingsModel';
 import { Database } from 'sqlite';
-import Chat from '@/interfaces/Chat';
 import ChatModel from '../models/ChatModel';
 import Connection from '@/interfaces/Connection';
 
@@ -104,7 +103,7 @@ class DBManager {
     );
   }
 
-  async getChatsByConnection(connectionId: number): Promise<Chat[]> {
+  async getChatsByConnection(connectionId: number): Promise<ChatModel[]> {
     return this.db.all<ChatModel[]>(
       `
         SELECT
@@ -122,7 +121,7 @@ class DBManager {
     );
   }
 
-  async getChat(chatId: number): Promise<Chat | undefined> {
+  async getChat(chatId: number): Promise<ChatModel | undefined> {
     return this.db.get<ChatModel>(
       `
         SELECT
@@ -139,7 +138,7 @@ class DBManager {
     );
   }
 
-  async addChat(connectionId: number, name: string): Promise<Chat> {
+  async addChat(connectionId: number, name: string): Promise<ChatModel> {
     const result = await this.db.run(
       `
         INSERT INTO Chat (ConnectionID, Name, SessionID, Provider)
