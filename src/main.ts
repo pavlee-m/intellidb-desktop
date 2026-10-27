@@ -441,8 +441,11 @@ app.on('ready', async () => {
       await dbManager.addMessage(chatId, messageId, message, role);
     });
 
-    ipcMain.handle('chats:getByMessageContent', async (_event, content: string) => {
-      return dbManager.getChatByMessageContent(content);
+    ipcMain.handle('chats:searchByMessageContent', async (_event, query: unknown) => {
+      if (typeof query !== 'string' || query.trim() === '') {
+        return [];
+      }
+      return dbManager.searchChats(query.trim());
     });
 
     ipcMain.handle('models:list', async (_event, provider: unknown) => {

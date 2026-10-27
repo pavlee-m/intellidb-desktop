@@ -8,7 +8,7 @@ type CliCommandCheckResult = import('./src/lib/cliCommand').CliCommandCheckResul
 type CliProvider = import('./src/lib/cliCommand').CliProvider;
 type AgentResult = import('./src/interfaces/AgentSession').AgentResult;
 type TurnConfig = import('./src/lib/turnConfig').TurnConfig;
-type MessageFromChat = import('./src/interfaces/MessageFromChat').default;
+type ChatSearchHit = import('./src/interfaces/ChatSearchHit').default;
 
 declare global {
   interface Window {
@@ -31,7 +31,7 @@ declare global {
       addChat: (connectionId: number) => Promise<ChatModel>;
       renameChat: (chatId: number, name: string) => Promise<void>;
       deleteChat: (chatId: number) => Promise<void>;
-      getChatByMessageContent: (content: string) => Promise<MessageFromChat | undefined>;
+      searchChats: (query: string) => Promise<ChatSearchHit[]>;
       addMessage: (chatId: number, messageId: string | null, message: string, role: number) => Promise<void>;
     };
     modelsApi: {

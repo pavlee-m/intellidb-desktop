@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/tooltip'
 import { useEffect, useMemo, useState } from 'react'
 import type ChatModel from '@/models/ChatModel'
+import type ChatSearchHit from '@/interfaces/ChatSearchHit'
 import type Connection from '@/interfaces/Connection'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import useChatStore from '@/stores/chatStore'
@@ -31,6 +32,7 @@ import DeleteConnectionDialog from '@/components/index/DeleteConnectionDialog'
 import DeleteChatDialog from '@/components/index/DeleteChatDialog'
 import ConnectionDialog from '@/components/index/ConnectionDialog'
 import ChatItem from '@/components/index/ChatItem'
+import ChatSearchDialog from '@/components/index/ChatSearchDialog'
 import RenameChatDialog from '@/components/index/RenameChatDialog'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { toast } from 'sonner'
@@ -79,6 +81,7 @@ function Index() {
   const [chatPendingRename, setChatPendingRename] = useState<ChatModel | null>(null)
   const [chatPendingDelete, setChatPendingDelete] = useState<ChatModel | null>(null)
   const [isDeletingChat, setIsDeletingChat] = useState(false)
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
   const applyAgentUpdate = useChatActivityStore((state) => state.applyAgentUpdate)
   const settings = useSettingsStore((state) => state.settings)
 
@@ -123,19 +126,25 @@ function Index() {
     }
   }
 
+  async function loadChatsIfMissing(connectionId: number): Promise<ChatModel[]> {
+    const loaded = useChatStore.getState().chatsByConnection
+    if (connectionId in loaded) {
+      return loaded[connectionId]
+    }
+
+    const chats = await window.chatsApi.getChats(connectionId)
+    setChats(connectionId, chats)
+    return chats
+  }
+
   const handleConnectionOpenChange = async (connectionId: number, open: boolean) => {
     setConnectionOpen(connectionId, open)
-    if (!open || connectionId in chatsByConnection) {
+    if (!open) {
       return
     }
 
     try {
-      // If the connection's chats are already loaded, don't fetch them again.
-      if (chatsByConnection[connectionId]) {
-        return
-      }
-      const chats = await window.chatsApi.getChats(connectionId)
-      setChats(connectionId, chats)
+      await loadChatsIfMissing(connectionId)
     } catch (error) {
       console.error(error)
       toast.error(error instanceof Error ? error.message : String(error))
@@ -193,10 +202,6 @@ function Index() {
     }
   }
 
-  const handleSearchClick = () => {
-    console.log('Search clicked')
-  }
-
   const handleDeleteConnection = async () => {
     if (!connectionPendingDelete) {
       return
@@ -236,7 +241,7 @@ function Index() {
     })
   }
 
-  const handleChatSelect = async (chat: ChatModel) => {
+  async function handleChatSelect(chat: ChatModel): Promise<boolean> {
     console.log('handleChatSelect', chat.id)
     // A chat that already has a provider can only resume with its provider
     // integration enabled and its CLI executable present, so check readiness
@@ -258,12 +263,29 @@ function Index() {
       })
       if (readiness.status === 'no-provider' || readiness.status === 'cli-unavailable') {
         toast.error(readiness.message)
-        return
+        return false
       }
     }
     openChat(chat.id);
     if (chatsByConnection[chat.connectionId]?.find((chat) => chat.id === -1) && chat.id !== -1) {
       removeChat(chat.connectionId, -1);
+    }
+    return true
+  }
+
+  async function handleSearchSelect(hit: ChatSearchHit): Promise<boolean> {
+    try {
+      const chats = await loadChatsIfMissing(hit.chat.connectionId)
+      const found = chats.find((chat) => chat.id === hit.chat.id)
+      if (!found) {
+        toast.error('This chat no longer exists')
+        return false
+      }
+      return handleChatSelect(found)
+    } catch (error) {
+      console.error(error)
+      toast.error(error instanceof Error ? error.message : String(error))
+      return false
     }
   }
 
@@ -274,7 +296,7 @@ function Index() {
           <SidebarHeader className="gap-3 border-b p-4">
             <Button
               className="w-full justify-start"
-              onClick={handleSearchClick}
+              onClick={() => setIsSearchOpen(true)}
               type="button"
               variant="outline"
             >
@@ -494,6 +516,11 @@ function Index() {
           }
         }}
         onConfirm={handleDeleteChatConfirm}
+      />
+      <ChatSearchDialog
+        open={isSearchOpen}
+        onOpenChange={setIsSearchOpen}
+        onSelect={handleSearchSelect}
       />
     </>
   )

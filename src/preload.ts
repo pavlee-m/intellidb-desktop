@@ -8,7 +8,7 @@ import type { Model } from '@/interfaces/Model'
 import type { CliCommandCheckResult, CliProvider } from '@/lib/cliCommand'
 import type { AgentResult } from '@/interfaces/AgentSession'
 import type { TurnConfig } from '@/lib/turnConfig'
-import type MessageFromChat from '@/interfaces/MessageFromChat'
+import type ChatSearchHit from '@/interfaces/ChatSearchHit'
 
 contextBridge.exposeInMainWorld('settingsApi', {
   getSettings: () => ipcRenderer.invoke('settings:get') as Promise<Settings>,
@@ -43,8 +43,8 @@ contextBridge.exposeInMainWorld('chatsApi', {
     ipcRenderer.invoke('chats:rename', chatId, name) as Promise<void>,
   deleteChat: (chatId: number) =>
     ipcRenderer.invoke('chats:delete', chatId) as Promise<void>,
-  getChatByMessageContent: (content: string) =>
-    ipcRenderer.invoke('chats:getByMessageContent', content) as Promise<MessageFromChat | undefined>,
+  searchChats: (query: string) =>
+    ipcRenderer.invoke('chats:searchByMessageContent', query) as Promise<ChatSearchHit[]>,
   addMessage: (chatId: number, messageId: string | null, message: string, role: number) =>
     ipcRenderer.invoke('chats:addMessage', chatId, messageId, message, role) as Promise<void>,
 })

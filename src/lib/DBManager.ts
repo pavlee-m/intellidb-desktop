@@ -8,23 +8,22 @@ import { Database } from 'sqlite';
 import ChatModel from '../models/ChatModel';
 import MessageModel from '../models/MessageModel';
 import Connection from '@/interfaces/Connection';
-import type MessageFromChat from '@/interfaces/MessageFromChat';
+import type ChatSearchHit from '@/interfaces/ChatSearchHit';
+import { cutSnippet } from '@/lib/chatSnippet';
 
 type ConnectionRow = Omit<Connection, 'sqlalchemy_query'> & {
   sqlalchemy_query: string | null;
 };
 
-type MessageFromChatRow = {
-  messageId: string | null;
-  messageChatId: number;
-  messageRole: number;
-  messageText: string;
-  chatId: number;
+type ChatSearchRow = {
+  id: number;
   connectionId: number;
   name: string;
   createdAt: string;
   sessionId: string;
   provider: string;
+  messageText: string;
+  matchStart: number;
 };
 
 function knownProvider(value: string | null): CliProvider | null {
@@ -180,50 +179,63 @@ class DBManager {
     return chat!;
   }
 
-  async getChatByMessageContent(content: string): Promise<MessageFromChat | undefined> {
-    const row = await this.db.get<MessageFromChatRow>(
-      `
-        SELECT
-          Message.MessageID AS messageId,
-          Message.ChatID AS messageChatId,
-          Message.Role AS messageRole,
-          Message.Message AS messageText,
-          Chat.ID AS chatId,
-          Chat.ConnectionID AS connectionId,
-          Chat.Name AS name,
-          Chat.CreatedAt AS createdAt,
-          Chat.SessionID AS sessionId,
-          Chat.Provider AS provider
-        FROM Message
-        JOIN Chat ON Message.ChatID = Chat.ID
-        WHERE instr(Message.Message, ?) > 0
-        LIMIT 1;
-      `,
-      [content],
-    );
-
-    if (!row) {
-      return undefined;
+  async searchChats(query: string, limit = 50): Promise<ChatSearchHit[]> {
+    const needle = query.trim();
+    // SQLite instr(text, '') is 1 for every row, so an empty needle would
+    // return the newest message of each chat instead of no hits.
+    if (!needle) {
+      return [];
     }
 
-    // The message will be necessary UI-wise.
+    const rows = await this.db.all<ChatSearchRow[]>(
+      `
+        SELECT
+          id,
+          connectionId,
+          name,
+          createdAt,
+          sessionId,
+          provider,
+          messageText,
+          matchStart
+        FROM (
+          SELECT
+            Chat.ID AS id,
+            Chat.ConnectionID AS connectionId,
+            Chat.Name AS name,
+            Chat.CreatedAt AS createdAt,
+            Chat.SessionID AS sessionId,
+            Chat.Provider AS provider,
+            Message.Message AS messageText,
+            instr(lower(Message.Message), lower(?)) - 1 AS matchStart,
+            ROW_NUMBER() OVER (
+              PARTITION BY Chat.ID
+              ORDER BY Message.CreatedAt DESC, Message.ID DESC
+            ) AS rn,
+            Message.CreatedAt AS messageCreatedAt,
+            Message.ID AS messageRowId
+          FROM Message
+          INNER JOIN Chat ON Chat.ID = Message.ChatID
+          WHERE instr(lower(Message.Message), lower(?)) > 0
+        ) AS ranked
+        WHERE rn = 1
+        ORDER BY messageCreatedAt DESC, messageRowId DESC
+        LIMIT ?;
+      `,
+      [needle, needle, limit],
+    );
 
-    return {
-      Message: {
-        chatId: row.messageChatId,
-        messageId: row.messageId,
-        role: row.messageRole,
-        message: row.messageText,
-      },
-      Chat: {
-        id: row.chatId,
+    return rows.map((row) => ({
+      chat: {
+        id: row.id,
         connectionId: row.connectionId,
         name: row.name,
         createdAt: row.createdAt,
         sessionId: row.sessionId,
         provider: row.provider,
       },
-    };
+      snippet: cutSnippet(row.messageText, row.matchStart, needle.length),
+    }));
   }
 
   async createSettingsTable(): Promise<void> {
