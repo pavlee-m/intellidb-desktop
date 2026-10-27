@@ -31,13 +31,17 @@ export class OpenCodeClient implements AgentSession {
   private agentProcess: ChildProcess | undefined
   private connection: acp.ClientConnection | undefined
   private sessionId = ''
+  messageStoreHandler: (chatId: number, messageId: string | null, text: string) => void
 
-  constructor(private input: {
-    handlers: ACPClientHandlers
-    command: string
-    existingSessionId?: string
-    mcpServers: acp.McpServer[]
-  }) {
+  constructor(
+    private readonly chatId: number,
+    messageStoreHandler: (chatId: number, messageId: string | null, text: string) => void,
+    private handlers: ACPClientHandlers,
+    private command: string,
+    private existingSessionId: string | undefined,
+    private mcpServers: acp.McpServer[] = [],
+  ) {
+    this.messageStoreHandler = messageStoreHandler
   }
 
   getSessionId(): string {
@@ -57,7 +61,7 @@ export class OpenCodeClient implements AgentSession {
   }
 
   private async openSession(): Promise<void> {
-    this.agentProcess = spawn(this.input.command, ['acp'], {
+    this.agentProcess = spawn(this.command, ['acp'], {
       stdio: ['pipe', 'pipe', 'inherit'],
     })
     const stdin = this.agentProcess.stdin
@@ -66,7 +70,7 @@ export class OpenCodeClient implements AgentSession {
       throw new Error('OpenCode ACP process is missing stdio pipes')
     }
 
-    const acpClient = new ACPClient(this.input.handlers)
+    const acpClient = new ACPClient(this.handlers, this.chatId, this.messageStoreHandler)
     this.connection = acp.client({ name: 'intellidb-client' })
       .onRequest(acp.methods.client.session.requestPermission, (ctx) =>
         acpClient.requestPermission(ctx.params),
@@ -94,13 +98,13 @@ export class OpenCodeClient implements AgentSession {
 
     // OpenCode rejects a relative cwd.
     const cwd = path.resolve(process.cwd())
-    if (this.input.existingSessionId) {
+    if (this.existingSessionId) {
       await this.connection.agent.request(acp.methods.agent.session.load, {
-        sessionId: this.input.existingSessionId,
+        sessionId: this.existingSessionId,
         cwd,
-        mcpServers: this.input.mcpServers,
+        mcpServers: this.mcpServers,
       })
-      this.sessionId = this.input.existingSessionId
+      this.sessionId = this.existingSessionId
       return
     }
 
@@ -108,7 +112,7 @@ export class OpenCodeClient implements AgentSession {
       acp.methods.agent.session.new,
       {
         cwd,
-        mcpServers: this.input.mcpServers,
+        mcpServers: this.mcpServers,
       },
     )
     this.sessionId = created.sessionId

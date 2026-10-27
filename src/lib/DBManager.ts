@@ -1,15 +1,30 @@
 import Settings from '@/interfaces/Settings';
 import type { CliProvider } from '@/lib/cliCommand';
 import type { ClaimResult } from '@/lib/agentHost';
-import { CURSOR_CLI_BINARY_KEY, parseCursorCliCommand, type CursorCliCommand } from '@/lib/cursorCliCommand';
+import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND, parseCursorCliCommand, type CursorCliCommand } from '@/lib/cursorCliCommand';
 import { DEFAULT_SQLMCP_PORT, parseSqlmcpPort } from '@/lib/sqlmcpPort';
 import SettingsModel from '../models/SettingsModel';
 import { Database } from 'sqlite';
 import ChatModel from '../models/ChatModel';
+import MessageModel from '../models/MessageModel';
 import Connection from '@/interfaces/Connection';
+import type MessageFromChat from '@/interfaces/MessageFromChat';
 
 type ConnectionRow = Omit<Connection, 'sqlalchemy_query'> & {
   sqlalchemy_query: string | null;
+};
+
+type MessageFromChatRow = {
+  messageId: string | null;
+  messageChatId: number;
+  messageRole: number;
+  messageText: string;
+  chatId: number;
+  connectionId: number;
+  name: string;
+  createdAt: string;
+  sessionId: string;
+  provider: string;
 };
 
 function knownProvider(value: string | null): CliProvider | null {
@@ -163,6 +178,163 @@ class DBManager {
     );
 
     return chat!;
+  }
+
+  async getChatByMessageContent(content: string): Promise<MessageFromChat | undefined> {
+    const row = await this.db.get<MessageFromChatRow>(
+      `
+        SELECT
+          Message.MessageID AS messageId,
+          Message.ChatID AS messageChatId,
+          Message.Role AS messageRole,
+          Message.Message AS messageText,
+          Chat.ID AS chatId,
+          Chat.ConnectionID AS connectionId,
+          Chat.Name AS name,
+          Chat.CreatedAt AS createdAt,
+          Chat.SessionID AS sessionId,
+          Chat.Provider AS provider
+        FROM Message
+        JOIN Chat ON Message.ChatID = Chat.ID
+        WHERE instr(Message.Message, ?) > 0
+        LIMIT 1;
+      `,
+      [content],
+    );
+
+    if (!row) {
+      return undefined;
+    }
+
+    // The message will be necessary UI-wise.
+
+    return {
+      Message: {
+        chatId: row.messageChatId,
+        messageId: row.messageId,
+        role: row.messageRole,
+        message: row.messageText,
+      },
+      Chat: {
+        id: row.chatId,
+        connectionId: row.connectionId,
+        name: row.name,
+        createdAt: row.createdAt,
+        sessionId: row.sessionId,
+        provider: row.provider,
+      },
+    };
+  }
+
+  async createSettingsTable(): Promise<void> {
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS Settings (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Key TEXT NOT NULL UNIQUE,
+        Value TEXT NOT NULL
+      );
+    `);
+  }
+
+  async createConnectionTable(): Promise<void> {
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS Connection (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        Name TEXT NOT NULL,
+        DBMS TEXT NOT NULL,
+        Host TEXT NOT NULL,
+        Username TEXT NOT NULL,
+        Password TEXT NOT NULL,
+        Database TEXT NOT NULL,
+        sqlalchemy_query TEXT
+      );
+    `);
+  }
+
+  async createChatTable(): Promise<void> {
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS Chat (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        ConnectionID INTEGER NOT NULL,
+        Name TEXT NOT NULL,
+        CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        SessionID TEXT,
+        Provider TEXT NOT NULL DEFAULT '',
+        FOREIGN KEY (ConnectionID) REFERENCES Connection(ID) ON DELETE CASCADE
+      );
+    `);
+  }
+
+  async createMessageTable(): Promise<void> {
+    await this.db.exec(`
+      CREATE TABLE IF NOT EXISTS Message (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        ChatID INTEGER NOT NULL,
+        MessageID TEXT,
+        Message TEXT NOT NULL,
+        Role INTEGER NOT NULL,
+        CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (ChatID) REFERENCES Chat(ID) ON DELETE CASCADE
+      );
+    `);
+  }
+
+  async ensureMessageColumns(): Promise<void> {
+    const table = await this.db.get<{ name: string }>(
+      `SELECT name FROM sqlite_master WHERE name = 'Message'`,
+    );
+    if (!table) {
+      return;
+    }
+    const columns = await this.db.all<{ name: string; notnull: number }[]>(`PRAGMA table_info(Message)`);
+    if (!columns.some((column) => column.name === 'MessageID')) {
+      await this.db.exec(`ALTER TABLE Message ADD COLUMN MessageID TEXT`);
+    }
+    if (!columns.some((column) => column.name === 'Role')) {
+      await this.db.exec(`ALTER TABLE Message ADD COLUMN Role INTEGER NOT NULL DEFAULT 0`);
+    }
+    if (columns.some((column) => column.name === 'MessageID' && column.notnull)) {
+      try {
+        await this.db.exec(`
+          BEGIN;
+          CREATE TABLE Message_new (
+            ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            ChatID INTEGER NOT NULL,
+            MessageID TEXT,
+            Message TEXT NOT NULL,
+            Role INTEGER NOT NULL,
+            CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (ChatID) REFERENCES Chat(ID) ON DELETE CASCADE
+          );
+          INSERT INTO Message_new (ID, ChatID, MessageID, Message, Role, CreatedAt)
+          SELECT ID, ChatID, MessageID, Message, Role, CreatedAt FROM Message;
+          DROP TABLE Message;
+          ALTER TABLE Message_new RENAME TO Message;
+          COMMIT;
+        `);
+      } catch (error) {
+        await this.db.exec('ROLLBACK');
+        throw error;
+      }
+    }
+  }
+
+  async insertDefaultSettings(): Promise<void> {
+    const defaults: [string, string][] = [
+      ['theme', 'light'],
+      ['opencode_integration_enabled', 'false'],
+      ['opencode_binary', 'opencode'],
+      ['cursor_cli_integration_enabled', 'false'],
+      [CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND],
+      ['sqlmcp_port', String(DEFAULT_SQLMCP_PORT)],
+    ];
+
+    for (const [key, value] of defaults) {
+      await this.db.run(
+        `INSERT INTO Settings (Key, Value) VALUES (?, ?);`,
+        [key, value],
+      );
+    }
   }
 
   async ensureChatProviderColumn(): Promise<void> {
@@ -342,6 +514,31 @@ class DBManager {
 
   async closeConnection(): Promise<void> {
     await this.db.close();
+  }
+
+  async getMessage(messageId: string): Promise<MessageModel | undefined> {
+    return this.db.get<MessageModel>(
+      `
+        SELECT
+          ChatID AS chatId,
+          MessageID AS messageId,
+          Role AS role,
+          Message AS message
+        FROM Message
+        WHERE MessageID = ?;
+      `,
+      [messageId],
+    );
+  }
+
+  async addMessage(chatId: number, messageId: string | null, message: string, role: number): Promise<void> {
+    await this.db.run(
+      `
+        INSERT INTO Message (ChatID, MessageID, Message, Role)
+        VALUES (?, ?, ?, ?);
+      `,
+      [chatId, messageId, message, role],
+    );
   }
 
 }

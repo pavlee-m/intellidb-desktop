@@ -8,6 +8,7 @@ import type { Model } from '@/interfaces/Model'
 import type { CliCommandCheckResult, CliProvider } from '@/lib/cliCommand'
 import type { AgentResult } from '@/interfaces/AgentSession'
 import type { TurnConfig } from '@/lib/turnConfig'
+import type MessageFromChat from '@/interfaces/MessageFromChat'
 
 contextBridge.exposeInMainWorld('settingsApi', {
   getSettings: () => ipcRenderer.invoke('settings:get') as Promise<Settings>,
@@ -42,6 +43,10 @@ contextBridge.exposeInMainWorld('chatsApi', {
     ipcRenderer.invoke('chats:rename', chatId, name) as Promise<void>,
   deleteChat: (chatId: number) =>
     ipcRenderer.invoke('chats:delete', chatId) as Promise<void>,
+  getChatByMessageContent: (content: string) =>
+    ipcRenderer.invoke('chats:getByMessageContent', content) as Promise<MessageFromChat | undefined>,
+  addMessage: (chatId: number, messageId: string | null, message: string, role: number) =>
+    ipcRenderer.invoke('chats:addMessage', chatId, messageId, message, role) as Promise<void>,
 })
 
 contextBridge.exposeInMainWorld('modelsApi', {
@@ -52,8 +57,8 @@ contextBridge.exposeInMainWorld('modelsApi', {
 contextBridge.exposeInMainWorld('agentApi', {
   connect: (chatId: number, sessionId: string) =>
     ipcRenderer.invoke('agent:connect', chatId, sessionId) as Promise<AgentResult>,
-  sendTurn: (chatId: number, sessionId: string, config: TurnConfig, text: string) =>
-    ipcRenderer.invoke('agent:sendTurn', chatId, sessionId, config, text) as Promise<AgentResult>,
+  sendTurn: (chatId: number, sessionId: string, config: TurnConfig, text: string, userText: string) =>
+    ipcRenderer.invoke('agent:sendTurn', chatId, sessionId, config, text, userText) as Promise<AgentResult>,
   applyConfig: (chatId: number, config: TurnConfig) =>
     ipcRenderer.invoke('agent:applyConfig', chatId, config) as Promise<AgentResult>,
   onActivity: (callback: (chatId: number, entry: ChatActivity) => void) => {

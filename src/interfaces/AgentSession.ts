@@ -12,6 +12,7 @@ export type AgentResult =
 
 export interface AgentSession {
   readonly provider: CliProvider
+  messageStoreHandler: (chatId: number, messageId: string | null, text: string) => void
   getSessionId(): string
   applyTurn(config: TurnConfig): Promise<void>
   sendMessage(text: string): Promise<unknown>

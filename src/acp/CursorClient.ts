@@ -26,22 +26,24 @@ function flatConfigValues(option: acp.SessionConfigOption): string[] {
 
 export class CursorClient implements AgentSession {
     readonly provider = 'cursor' as const;
-
     private acpClient!: ACPClient;
     private agentProcess!: ChildProcess;
     private connection!: acp.ClientConnection;
     private sessionId!: string;
+    messageStoreHandler: (chatId: number, messageId: string | null, text: string) => void;
 
     getSessionId(): string {
         return this.sessionId;
     }
-
-    constructor(
+    constructor (
+        private readonly chatId: number,
+        messageStoreHandler: (chatId: number, messageId: string | null, text: string) => void,
         private handlers: ACPClientHandlers,
         private command: string,
-        private existingSessionId?: string,
+        private existingSessionId: string | undefined,
         private mcpServers: acp.McpServer[] = [],
     ) {
+        this.messageStoreHandler = messageStoreHandler;
     }
 
     async cancel(): Promise<void> {
@@ -55,7 +57,7 @@ export class CursorClient implements AgentSession {
             stdio: ["pipe", "pipe", "inherit"],
         });
 
-        this.acpClient = new ACPClient(this.handlers);
+        this.acpClient = new ACPClient(this.handlers, this.chatId, this.messageStoreHandler);
 
         this.connection = acp.client({ name: "intellidb-client" })
             .onRequest(acp.methods.client.session.requestPermission, (ctx) =>

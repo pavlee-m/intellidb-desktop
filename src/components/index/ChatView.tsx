@@ -51,12 +51,20 @@ interface ChatViewProps {
 // which useSyncExternalStore treats as a state change and loops forever.
 const NO_ENTRIES: ChatActivity[] = []
 
+function processUserMessage(message: string): string {
+  const lines = message.split('\n')
+  if (lines[0]?.startsWith('dangerousQueries:') && lines[1]?.startsWith('connectionId:')) {
+    return lines.slice(2).join('\n')
+  }
+  return message
+}
+
 function ActivityEntry({ entry }: { entry: ChatActivity }) {
   switch (entry.kind) {
     case 'user':
       return (
         <div className="max-w-[80%] self-end whitespace-pre-wrap rounded-lg bg-muted px-3 py-2">
-          {entry.text}
+          {processUserMessage(entry.text) || entry.text}
         </div>
       )
     case 'agent_message':
@@ -102,6 +110,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const entries = useChatActivityStore(
     (state) => state.activityByChatId[chatId] ?? NO_ENTRIES,
   )
+
   const pushUserMessage = useChatActivityStore((state) => state.pushUserMessage)
   const [waitForInitialActivity, setWaitForInitialActivity] = useState(chatId === -1 ? false: true)
   const [input, setInput] = useState('')
@@ -159,9 +168,9 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const visibleModels = useMemo(() => {
     const catalog = allModels.filter((model) => {
       if (model.provider === 'cursor') {
-        return Boolean(settings?.cursor_cli_integration_enabled)
+        return settings?.cursor_cli_integration_enabled
       }
-      return Boolean(settings?.opencode_integration_enabled)
+      return settings?.opencode_integration_enabled
     })
     return lockedProvider
       ? catalog.filter((model) => model.provider === lockedProvider)
@@ -358,11 +367,12 @@ export default function ChatView({ chatId }: ChatViewProps) {
       setInput('')
       pushUserMessage(chat.id, text)
       try {
-        setProvider(chat.connectionId, chat.id, config.provider)
+        if (!chat.provider){
+          setProvider(chat.connectionId, chat.id, config.provider)
+        }
         const promptText = `dangerousQueries: ${props.dangerousQueries ?? false}\nconnectionId: ${backendConnectionId ?? 'unknown'}\n${text}`
-        const sent = await window.agentApi.sendTurn(chat.id, chat.sessionId ?? '', config, promptText)
-        setProvider(chat.connectionId, chat.id, sent.provider ?? '')
-        if (sent.sessionId) {
+        const sent = await window.agentApi.sendTurn(chat.id, chat.sessionId ?? '', config, promptText, text)
+        if (sent.sessionId && !chat.sessionId) {
           setSessionId(chat.connectionId, chat.id, sent.sessionId)
         }
         if (sent.ok === false) {

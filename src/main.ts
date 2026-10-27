@@ -11,13 +11,12 @@ import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
 import BackendConnection from './interfaces/BackendConnection';
-import { ensureAgent, setAgentSessionPersister, setChatProviderClaim, setAgentCliResolver, setAgentMcpServers, disposeAgent, disposeAllAgents, cancelRequest, sendAgentTurn, applyLiveConfig } from './lib/agentHost';
+import { AgentHost } from './lib/agentHost';
 import type { AgentResult } from './interfaces/AgentSession';
 import { fetchCursorModels, fetchOpenCodeModels } from './lib/modelFetching';
 import { getProviderCliCommand } from './lib/cliCommand';
 import { parseCliProvider, type TurnConfig } from './lib/turnConfig';
 import { checkCliCommand } from './lib/cliCommandCheck';
-import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND } from './lib/cursorCliCommand';
 import { encryptSecret, decryptSecret } from './lib/encryptedStorage';
 import { getAvailableKeyringBackend } from './lib/linuxKeyringBackend';
 
@@ -45,6 +44,7 @@ if (started) {
 }
 
 let dbManager: DBManager;
+let agentHost: AgentHost | undefined;
 let settings: Settings;
 let connections: BackendConnection[] = [];
 let backendProcess: ChildProcess;
@@ -86,71 +86,16 @@ async function initDatabase() {
 
   // Check if sqlite database exists, if not create it
   if (!dbExists) {
-    // Create tables
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS Settings (
-        ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        Key TEXT NOT NULL UNIQUE,
-        Value TEXT NOT NULL
-      );
-    `)
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS Connection (
-        ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        Name TEXT NOT NULL,
-        DBMS TEXT NOT NULL,
-        Host TEXT NOT NULL,
-        Username TEXT NOT NULL,
-        Password TEXT NOT NULL,
-        Database TEXT NOT NULL,
-        sqlalchemy_query TEXT
-      );
-    `);
-    await db.exec(`
-      CREATE TABLE IF NOT EXISTS Chat (
-        ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        ConnectionID INTEGER NOT NULL,
-        Name TEXT NOT NULL,
-        CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
-        SessionID TEXT,
-        Provider TEXT NOT NULL DEFAULT '',
-        FOREIGN KEY (ConnectionID) REFERENCES Connection(ID) ON DELETE CASCADE
-      );
-    `);
-
-    // Insert default settings
-    await db.exec(`
-      INSERT INTO Settings (Key, Value) VALUES
-      ('theme', 'light');
-    `);
-
-    await db.exec(`
-      INSERT INTO Settings (Key, Value) VALUES
-      ('opencode_integration_enabled', 'false');
-    `);
-
-    await db.exec(`
-      INSERT INTO Settings (Key, Value) VALUES
-      ('opencode_binary', 'opencode');
-    `);
-
-    await db.exec(`
-      INSERT INTO Settings (Key, Value) VALUES
-      ('cursor_cli_integration_enabled', 'false');
-    `);
-
-    await db.exec(`
-      INSERT INTO Settings (Key, Value) VALUES
-      ('${CURSOR_CLI_BINARY_KEY}', '${DEFAULT_CURSOR_CLI_COMMAND}');
-    `);
-
-    await db.exec(`
-      INSERT INTO Settings (Key, Value) VALUES
-      ('sqlmcp_port', '8000');
-    `);
+    await dbManager.createSettingsTable();
+    await dbManager.createConnectionTable();
+    await dbManager.createChatTable();
+    await dbManager.createMessageTable();
+    await dbManager.insertDefaultSettings();
   }
 
+  await dbManager.createMessageTable();
   await dbManager.ensureChatProviderColumn();
+  await dbManager.ensureMessageColumns();
 }
 
 function getBackendDir(): string {
@@ -292,7 +237,7 @@ app.on('before-quit', async (event) => {
       await killProcessTree(backendProcess);
     }
 
-    disposeAllAgents();
+    agentHost?.disposeAllAgents();
   }
   catch (e) {
     console.log(e);
@@ -320,7 +265,22 @@ app.on('ready', async () => {
     const response = await fetch(`${backendUrl}/connections`);
     const data = await response.json();
     console.log(data);
-    setAgentMcpServers([{ type: 'http', name: 'sqlmcp', url: sqlmcpMcpUrl, headers: [] }]);
+    const host = new AgentHost({
+      mcpServers: [{ type: 'http', name: 'sqlmcp', url: sqlmcpMcpUrl, headers: [] }],
+      persistSessionId: (chatId, sessionId) => dbManager.updateChatSessionId(chatId, sessionId),
+      claimProvider: (chatId, provider) => dbManager.claimChatProvider(chatId, provider),
+      resolveCli: async (provider) => {
+        if (provider === 'cursor') {
+          return dbManager.getCursorCliCommand();
+        }
+        const loaded = await dbManager.getSettings();
+        return getProviderCliCommand('opencode', loaded);
+      },
+      storeMessage: (chatId, messageId, message, role) =>
+        dbManager.addMessage(chatId, messageId, message, role),
+      getMessage: (messageId) => dbManager.getMessage(messageId),
+    });
+    agentHost = host;
     const cons: Connection[] = await dbManager.getConnections();
     connections = cons.map(toBackendConnection);
     ipcMain.handle('settings:get', async () => {
@@ -474,7 +434,15 @@ app.on('ready', async () => {
 
     ipcMain.handle('chats:delete', async (_event, chatId: number) => {
       await dbManager.deleteChat(chatId);
-      disposeAgent(chatId);
+      host.disposeAgent(chatId);
+    });
+
+    ipcMain.handle('chats:addMessage', async (_event, chatId: number, messageId: string | null, message: string, role: number) => {
+      await dbManager.addMessage(chatId, messageId, message, role);
+    });
+
+    ipcMain.handle('chats:getByMessageContent', async (_event, content: string) => {
+      return dbManager.getChatByMessageContent(content);
     });
 
     ipcMain.handle('models:list', async (_event, provider: unknown) => {
@@ -492,24 +460,13 @@ app.on('ready', async () => {
       return fetchOpenCodeModels(getProviderCliCommand('opencode', loaded));
     });
 
-    // Give the agent host a method to persist the session id to the database.
-    setAgentSessionPersister((chatId, sessionId) => dbManager.updateChatSessionId(chatId, sessionId));
-    setChatProviderClaim((chatId, provider) => dbManager.claimChatProvider(chatId, provider));
-    setAgentCliResolver(async (provider) => {
-      if (provider === 'cursor') {
-        return dbManager.getCursorCliCommand();
-      }
-      const loaded = await dbManager.getSettings();
-      return getProviderCliCommand('opencode', loaded);
-    });
-
     ipcMain.handle('agent:connect', async (event, chatId: number, sessionId: unknown): Promise<AgentResult> => {
       const chat = await dbManager.getChat(chatId);
       if (!chat) {
         return { ok: false, provider: null, sessionId: null, message: 'Chat not found' };
       }
       const provider = parseCliProvider(chat.provider);
-      return ensureAgent({
+      return host.ensureAgent({
         chatId,
         sessionId: typeof sessionId === 'string' ? sessionId : '',
         provider,
@@ -522,7 +479,7 @@ app.on('ready', async () => {
       if (!chat) {
         return { ok: false, provider: null, sessionId: null, message: 'Chat not found' };
       }
-      return applyLiveConfig(chatId, config);
+      return host.applyLiveConfig(chatId, config);
     });
 
     ipcMain.handle('agent:sendTurn', async (
@@ -531,6 +488,7 @@ app.on('ready', async () => {
       sessionId: unknown,
       config: TurnConfig,
       text: unknown,
+      userText: unknown,
     ): Promise<AgentResult> => {
       const chat = await dbManager.getChat(chatId);
       if (!chat) {
@@ -547,11 +505,12 @@ app.on('ready', async () => {
           message: 'Connect the database before sending messages',
         };
       }
-      return sendAgentTurn({
+      return host.sendAgentTurn({
         chatId,
         sessionId: typeof sessionId === 'string' ? sessionId : '',
         config,
         text: typeof text === 'string' ? text : '',
+        userText: typeof userText === 'string' ? userText : '',
         onActivity: (entry) => event.sender.send('agent:activity', { chatId, entry }),
       });
     });
@@ -561,7 +520,7 @@ app.on('ready', async () => {
       if (!chat) {
         throw new Error('Chat not found');
       }
-      return cancelRequest(chatId);
+      return host.cancelRequest(chatId);
     });
 
     ipcMain.handle('settings:update', async (_event, key: string, value: string) => {

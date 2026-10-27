@@ -5,7 +5,11 @@ import ACPClientHandlers from "../interfaces/ACPClientHandlers";
 
 export class ACPClient implements acp.Client {
 
-    constructor(private handlers: ACPClientHandlers) {
+    constructor(
+        private handlers: ACPClientHandlers,
+        private readonly chatId: number,
+        private messageStoreHandler: (chatId: number, messageId: string | null, text: string) => void,
+    ) {
     }
 
     async requestPermission(params: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
@@ -18,6 +22,9 @@ export class ACPClient implements acp.Client {
         switch (update.sessionUpdate) {
             case "agent_message_chunk":
                 this.handlers.onAgentMessageChunk(update);
+                if (update.content.type === "text") {
+                    this.messageStoreHandler(this.chatId, update.messageId ?? null, update.content.text);
+                }
                 break;
             case "agent_thought_chunk":
                 this.handlers.onAgentThoughtChunk(update);
