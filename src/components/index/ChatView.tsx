@@ -117,9 +117,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const [isSending, setIsSending] = useState(false)
   const chatProperties = useGlobalStore((state) => state.chatProperties[chatId]);
   const allModels = useModelsStore((state) => state.models)
-  const setAllModels = useModelsStore((state) => state.setModels)
   const settings = useSettingsStore((state) => state.settings)
-  const setSettings = useSettingsStore((state) => state.setSettings)
   const setChatProperties = useGlobalStore((state) => state.setChatProperties)
   const updateChatProperties = useGlobalStore((state) => state.updateChatProperties)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -221,49 +219,6 @@ export default function ChatView({ chatId }: ChatViewProps) {
       handleAgentConnect(currentChat);
     }
   }, [currentChat?.id, isConnectionOnline])
-
-  const loadGeneration = useRef(0)
-  const loadModels = async () => {
-    const generation = loadGeneration.current + 1
-    loadGeneration.current = generation
-    const loaded = settings ?? await window.settingsApi.getSettings()
-    if (!settings) {
-      setSettings(loaded)
-    }
-    const previous = useModelsStore.getState().models
-    let cursorModels: Model[] = []
-    let opencodeModels: Model[] = []
-    if (loaded.cursor_cli_integration_enabled) {
-      try {
-        cursorModels = await window.modelsApi.list('cursor')
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : String(error))
-        cursorModels = previous.filter((model) => model.provider === 'cursor')
-      }
-    }
-    if (loaded.opencode_integration_enabled) {
-      try {
-        opencodeModels = await window.modelsApi.list('opencode')
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : String(error))
-        opencodeModels = previous.filter((model) => model.provider === 'opencode')
-      }
-    }
-    if (generation !== loadGeneration.current) {
-      return
-    }
-    setAllModels([...cursorModels, ...opencodeModels])
-  }
-
-  useEffect(() => {
-    void loadModels()
-  }, [
-    settings?.cursor_cli_integration_enabled,
-    settings?.opencode_integration_enabled,
-    settings?.cursor_cli_binary,
-    settings?.opencode_binary,
-  ])
-
 
   const pushLiveConfig = (props: ChatProperties) => {
     if (chatId === -1) return
