@@ -15,8 +15,6 @@ function RootLayout() {
   const loadGeneration = useRef(0)
 
   const loadModels = async () => {
-    const generation = loadGeneration.current + 1
-    loadGeneration.current = generation
     const loaded = settings ?? await window.settingsApi.getSettings()
     const previous = useModelsStore.getState().models
     const kept = (provider: Model['provider']) =>
@@ -24,9 +22,6 @@ function RootLayout() {
     let cursorModels = loaded.cursor_cli_integration_enabled ? kept('cursor') : []
     let opencodeModels = loaded.opencode_integration_enabled ? kept('opencode') : []
     const publish = () => {
-      if (generation !== loadGeneration.current) {
-        return
-      }
       setAllModels([...cursorModels, ...opencodeModels])
     }
     // Drop a provider that was just turned off before either CLI returns.
