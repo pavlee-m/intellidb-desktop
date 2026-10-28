@@ -108,14 +108,6 @@ function IntegrationsPage() {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <section className="rounded-xl border bg-card p-5 shadow-sm">
-        <h2 className="font-medium">Integrations</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Integration settings will appear here. Connect external services, manage API keys, and configure
-          sync behavior.
-        </p>
-      </section>
-
-      <section className="rounded-xl border bg-card p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div className="flex">

@@ -129,8 +129,8 @@ export default function ConnectionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>New connection</DialogTitle>
-          <DialogDescription>Create a new database connection to start querying.</DialogDescription>
+          <DialogTitle>{editedConnection ? "Edit" : "Create"} Connection</DialogTitle>
+          <DialogDescription>{editedConnection ? "Edit an existing database connection." : "Create a new database connection to start querying."}</DialogDescription>
         </DialogHeader>
         <form
           className="flex max-h-[calc(85vh-5rem)] flex-col"
