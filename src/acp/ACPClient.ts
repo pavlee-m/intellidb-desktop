@@ -13,6 +13,7 @@ export class ACPClient implements acp.Client {
     }
 
     async requestPermission(params: acp.RequestPermissionRequest): Promise<acp.RequestPermissionResponse> {
+        console.log("requestPermission", params);
         return this.handlers.handleRequestPermission(params);
     }
 

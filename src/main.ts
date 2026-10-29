@@ -19,6 +19,7 @@ import { parseCliProvider, type TurnConfig } from './lib/turnConfig';
 import { checkCliCommand } from './lib/cliCommandCheck';
 import { encryptSecret, decryptSecret } from './lib/encryptedStorage';
 import { getAvailableKeyringBackend } from './lib/linuxKeyringBackend';
+import type { RequestPermissionRequest } from '@agentclientprotocol/sdk';
 
 // On Linux, Chromium auto-detects the keyring backend only in GNOME/KDE
 // sessions. Other environments (e.g. Hyprland) silently fall back to
@@ -48,6 +49,57 @@ let agentHost: AgentHost | undefined;
 let settings: Settings;
 let connections: BackendConnection[] = [];
 let backendProcess: ChildProcess;
+
+type PendingSlot = {
+  params: RequestPermissionRequest
+  resolve: (optionId: string | null) => void
+}
+const pendingByChatId = new Map<number, PendingSlot>()
+
+function publishPermission(chatId: number, request: RequestPermissionRequest | null): void {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (!win || win.isDestroyed()) {
+    return
+  }
+  win.webContents.send('agent:permission-changed', { chatId, request })
+}
+
+function askPermission(
+  chatId: number,
+  params: RequestPermissionRequest,
+): Promise<string | null> {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (!win || win.isDestroyed() || params.options.length === 0) {
+    return Promise.resolve(null)
+  }
+  const existing = pendingByChatId.get(chatId)
+  if (existing) {
+    // Replace in place so the renderer never sees a null between two asks.
+    existing.resolve(null)
+    pendingByChatId.delete(chatId)
+  }
+  return new Promise<string | null>((resolve) => {
+    pendingByChatId.set(chatId, { params, resolve })
+    publishPermission(chatId, params)
+  })
+}
+
+function settlePermission(chatId: number, optionId: string | null): void {
+  const slot = pendingByChatId.get(chatId)
+  if (!slot) {
+    return
+  }
+  if (optionId !== null && !slot.params.options.some((option) => option.optionId === optionId)) {
+    return
+  }
+  pendingByChatId.delete(chatId)
+  slot.resolve(optionId)
+  publishPermission(chatId, null)
+}
+
+function releasePermission(chatId: number): void {
+  settlePermission(chatId, null)
+}
 
 let backendUrl = 'http://localhost:8000';
 // The agent subprocess must reach the same sqlmcp instance main.ts spawned.
@@ -202,6 +254,12 @@ const createWindow = async () => {
 
   // Open the DevTools.
   mainWindow.webContents.openDevTools();
+
+  mainWindow.on('closed', () => {
+    for (const chatId of [...pendingByChatId.keys()]) {
+      settlePermission(chatId, null)
+    }
+  });
 };
 
 function waitForExit(child: ChildProcess): Promise<void> {
@@ -279,6 +337,12 @@ app.on('ready', async () => {
       storeMessage: (chatId, messageId, message, role) =>
         dbManager.addMessage(chatId, messageId, message, role),
       getMessage: (messageId) => dbManager.getMessage(messageId),
+      onActivity: (chatId, entry) => {
+        const win = BrowserWindow.getAllWindows()[0];
+        win?.webContents.send('agent:activity', { chatId, entry });
+      },
+      askPermission: (chatId, params) => askPermission(chatId, params),
+      releasePermission: (chatId) => releasePermission(chatId),
     });
     agentHost = host;
     const cons: Connection[] = await dbManager.getConnections();
@@ -463,7 +527,7 @@ app.on('ready', async () => {
       return fetchOpenCodeModels(getProviderCliCommand('opencode', loaded));
     });
 
-    ipcMain.handle('agent:connect', async (event, chatId: number, sessionId: unknown): Promise<AgentResult> => {
+    ipcMain.handle('agent:connect', async (_event, chatId: number, sessionId: unknown): Promise<AgentResult> => {
       const chat = await dbManager.getChat(chatId);
       if (!chat) {
         return { ok: false, provider: null, sessionId: null, message: 'Chat not found' };
@@ -473,7 +537,6 @@ app.on('ready', async () => {
         chatId,
         sessionId: typeof sessionId === 'string' ? sessionId : '',
         provider,
-        onActivity: (entry) => event.sender.send('agent:activity', { chatId, entry }),
       });
     });
 
@@ -486,7 +549,7 @@ app.on('ready', async () => {
     });
 
     ipcMain.handle('agent:sendTurn', async (
-      event,
+      _event,
       chatId: number,
       sessionId: unknown,
       config: TurnConfig,
@@ -514,7 +577,6 @@ app.on('ready', async () => {
         config,
         text: typeof text === 'string' ? text : '',
         userText: typeof userText === 'string' ? userText : '',
-        onActivity: (entry) => event.sender.send('agent:activity', { chatId, entry }),
       });
     });
 
@@ -525,6 +587,16 @@ app.on('ready', async () => {
       }
       return host.cancelRequest(chatId);
     });
+
+    ipcMain.handle('agent:permission-current', (_e, chatId: number) =>
+      pendingByChatId.get(chatId)?.params ?? null,
+    );
+    ipcMain.handle('agent:permission-select', (_e, chatId: number, optionId: string) =>
+      settlePermission(chatId, optionId),
+    );
+    ipcMain.handle('agent:permission-dismiss', (_e, chatId: number) =>
+      releasePermission(chatId),
+    );
 
     ipcMain.handle('settings:update', async (_event, key: string, value: string) => {
       await dbManager.updateSetting(key, value);

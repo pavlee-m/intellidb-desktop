@@ -1,7 +1,7 @@
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import { createRootRoute, Outlet } from '@tanstack/react-router'
 import useSettingsStore from '@/stores/settingsStore'
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
 import useModelsStore from '@/stores/modelsStore'
@@ -12,7 +12,6 @@ function RootLayout() {
   const setSettings = useSettingsStore((state) => state.setSettings);
   const setConnections = useBackendConnectionStore((state) => state.setConnections)
   const setAllModels = useModelsStore((state) => state.setModels)
-  const loadGeneration = useRef(0)
 
   const loadModels = async () => {
     const loaded = settings ?? await window.settingsApi.getSettings()

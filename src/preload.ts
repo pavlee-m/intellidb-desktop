@@ -9,6 +9,7 @@ import type { CliCommandCheckResult, CliProvider } from '@/lib/cliCommand'
 import type { AgentResult } from '@/interfaces/AgentSession'
 import type { TurnConfig } from '@/lib/turnConfig'
 import type ChatSearchHit from '@/interfaces/ChatSearchHit'
+import type { RequestPermissionRequest } from '@agentclientprotocol/sdk'
 
 contextBridge.exposeInMainWorld('settingsApi', {
   getSettings: () => ipcRenderer.invoke('settings:get') as Promise<Settings>,
@@ -71,4 +72,21 @@ contextBridge.exposeInMainWorld('agentApi', {
   },
   cancel: (chatId: number) =>
     ipcRenderer.invoke('agent:cancel', chatId) as Promise<void>,
+  onPermissionChange: (chatId: number, callback: (request: RequestPermissionRequest | null) => void) => {
+    let sawEvent = false
+    const listener = (_event: unknown, payload: { chatId: number; request: RequestPermissionRequest | null }) => {
+      if (payload.chatId !== chatId) return
+      sawEvent = true
+      callback(payload.request)
+    }
+    ipcRenderer.on('agent:permission-changed', listener)
+    void ipcRenderer.invoke('agent:permission-current', chatId).then((request: RequestPermissionRequest | null) => {
+      if (!sawEvent) callback(request)
+    })
+    return () => ipcRenderer.removeListener('agent:permission-changed', listener)
+  },
+  selectPermission: (chatId: number, optionId: string) =>
+    ipcRenderer.invoke('agent:permission-select', chatId, optionId) as Promise<void>,
+  dismissPermission: (chatId: number) =>
+    ipcRenderer.invoke('agent:permission-dismiss', chatId) as Promise<void>,
 })

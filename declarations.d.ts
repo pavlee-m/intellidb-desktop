@@ -9,6 +9,7 @@ type CliProvider = import('./src/lib/cliCommand').CliProvider;
 type AgentResult = import('./src/interfaces/AgentSession').AgentResult;
 type TurnConfig = import('./src/lib/turnConfig').TurnConfig;
 type ChatSearchHit = import('./src/interfaces/ChatSearchHit').default;
+type RequestPermissionRequest = import('@agentclientprotocol/sdk').RequestPermissionRequest;
 
 declare global {
   interface Window {
@@ -49,6 +50,9 @@ declare global {
       applyConfig: (chatId: number, config: TurnConfig) => Promise<AgentResult>;
       cancel: (chatId: number) => Promise<void>;
       onActivity: (callback: (chatId: number, entry: ChatActivity) => void) => () => void;
+      onPermissionChange: (chatId: number, callback: (request: RequestPermissionRequest | null) => void) => () => void;
+      selectPermission: (chatId: number, optionId: string) => Promise<void>;
+      dismissPermission: (chatId: number) => Promise<void>;
     };
   }
 }

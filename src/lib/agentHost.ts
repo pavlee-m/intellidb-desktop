@@ -29,6 +29,9 @@ export interface AgentHostOptions {
   resolveCli: (provider: CliProvider) => Promise<string>;
   storeMessage: StoreMessages;
   getMessage: (messageId: string) => Promise<MessageModel | undefined>;
+  onActivity: (chatId: number, entry: ChatActivity) => void;
+  askPermission: (chatId: number, params: acp.RequestPermissionRequest) => Promise<string | null>;
+  releasePermission: (chatId: number) => void;
 }
 
 type LiveAgent = {
@@ -45,77 +48,6 @@ type ConnectableSession = AgentSession & {
 type Spawned =
   | { ok: true; client: AgentSession }
   | { ok: false; sessionId: string | null; error: unknown };
-
-function createHandlers(onActivity: (entry: ChatActivity) => void): ACPClientHandlers {
-  const toolEntries = new Map<string, ChatActivity>();
-
-  return {
-    handleRequestPermission: async (params) => {
-      const option =
-        params.options.find((item) => item.kind === 'allow_once' || item.kind === 'allow_always') ??
-        params.options[0];
-      if (!option) {
-        return { outcome: { outcome: 'cancelled' } };
-      }
-      return { outcome: { outcome: 'selected', optionId: option.optionId } };
-    },
-    onAgentMessageChunk: (update) => {
-      onActivity({
-        key: '',
-        kind: 'agent_message',
-        text: update.content.type === 'text' ? update.content.text : '',
-      });
-    },
-    onAgentThoughtChunk: (update) => {
-      onActivity({
-        key: '',
-        kind: 'agent_thought',
-        text: update.content.type === 'text' ? update.content.text : '',
-      });
-    },
-    onUserMessageChunk: (update) => {
-      onActivity({
-        key: '',
-        kind: 'user',
-        text: update.content.type === 'text' ? update.content.text : '',
-      });
-    },
-    onToolCall: (update) => {
-      const entry: ChatActivity = {
-        key: update.toolCallId,
-        kind: 'tool',
-        text: update.title,
-        status: update.status,
-      };
-      toolEntries.set(update.toolCallId, entry);
-      onActivity(entry);
-    },
-    onToolCallUpdate: (update) => {
-      const existing = toolEntries.get(update.toolCallId);
-      const entry: ChatActivity = {
-        key: update.toolCallId,
-        kind: 'tool',
-        text: update.title ?? existing?.text ?? '',
-        status: update.status ?? existing?.status,
-      };
-      toolEntries.set(update.toolCallId, entry);
-      onActivity(entry);
-    },
-    onPlan: (update) => {
-      onActivity({
-        key: 'plan',
-        kind: 'plan',
-        text: update.entries
-          .map((entry) => `${entry.content} (${entry.status})`)
-          .join('\n'),
-      });
-    onOtherUpdate: (update:any) => {
-      console.log('onOtherUpdate', update);
-    }
-    },
-    onAvailableCommandsUpdate: () => undefined,
-  };
-}
 
 function liveSessionId(client: AgentSession | undefined): string | null {
   if (!client) {
@@ -148,7 +80,6 @@ export class AgentHost {
     chatId: number;
     sessionId: string;
     provider: CliProvider;
-    onActivity: (entry: ChatActivity) => void;
   }): Promise<AgentResult> {
     const pending = this.pendingConnects.get(input.chatId);
     if (pending) {
@@ -167,13 +98,11 @@ export class AgentHost {
     config: TurnConfig;
     text: string;
     userText: string;
-    onActivity: (entry: ChatActivity) => void;
   }): Promise<AgentResult> {
     const connected = await this.ensureAgent({
       chatId: input.chatId,
       sessionId: input.sessionId,
       provider: input.config.provider,
-      onActivity: input.onActivity,
     });
     if (connected.ok === false) {
       return connected;
@@ -210,6 +139,79 @@ export class AgentHost {
     return connected;
   }
 
+  createHandlers(chatId: number, onActivity: (entry: ChatActivity) => void): ACPClientHandlers {
+    const toolEntries = new Map<string, ChatActivity>();
+
+    return {
+      handleRequestPermission: async (params) => {
+        if (params.toolCall.title === 'sqlmcp-execute_sql: execute_sql') {
+          return { outcome: { outcome: 'selected', optionId: 'allow_always' } };
+        }
+        const optionId = await this.options.askPermission(chatId, params);
+        if (!optionId) {
+          return { outcome: { outcome: 'cancelled' } };
+        }
+        return { outcome: { outcome: 'selected', optionId } };
+      },
+      onAgentMessageChunk: (update) => {
+        onActivity({
+          key: '',
+          kind: 'agent_message',
+          text: update.content.type === 'text' ? update.content.text : '',
+        });
+      },
+      onAgentThoughtChunk: (update) => {
+        onActivity({
+          key: '',
+          kind: 'agent_thought',
+          text: update.content.type === 'text' ? update.content.text : '',
+        });
+      },
+      onUserMessageChunk: (update) => {
+        onActivity({
+          key: '',
+          kind: 'user',
+          text: update.content.type === 'text' ? update.content.text : '',
+        });
+      },
+      onToolCall: (update) => {
+        const entry: ChatActivity = {
+          key: update.toolCallId,
+          kind: 'tool',
+          text: update.title,
+          status: update.status,
+        };
+        toolEntries.set(update.toolCallId, entry);
+        onActivity(entry);
+      },
+      onToolCallUpdate: (update) => {
+        const existing = toolEntries.get(update.toolCallId);
+        const entry: ChatActivity = {
+          key: update.toolCallId,
+          kind: 'tool',
+          text: update.title ?? existing?.text ?? '',
+          status: update.status ?? existing?.status,
+        };
+        toolEntries.set(update.toolCallId, entry);
+        onActivity(entry);
+      },
+      onPlan: (update) => {
+        onActivity({
+          key: 'plan',
+          kind: 'plan',
+          text: update.entries
+            .map((entry) => `${entry.content} (${entry.status})`)
+            .join('\n'),
+        });
+      onOtherUpdate: (update:any) => {
+        console.log('onOtherUpdate', update);
+      }
+      },
+      onAvailableCommandsUpdate: () => undefined,
+    };
+  }
+
+
   async applyLiveConfig(chatId: number, config: TurnConfig): Promise<AgentResult> {
     const agent = this.agents.get(chatId);
     const client = agent?.ready ? agent.client : undefined;
@@ -233,6 +235,7 @@ export class AgentHost {
   }
 
   async cancelRequest(chatId: number): Promise<void> {
+    this.options.releasePermission(chatId);
     const agent = this.agents.get(chatId);
     if (!agent) {
       throw new Error('Agent is not connected');
@@ -247,6 +250,7 @@ export class AgentHost {
   }
 
   disposeAgent(chatId: number): void {
+    this.options.releasePermission(chatId);
     const agent = this.agents.get(chatId);
     if (!agent) {
       return;
@@ -273,9 +277,8 @@ export class AgentHost {
     provider: CliProvider,
     command: string,
     existingSessionId: string | undefined,
-    onActivity: (entry: ChatActivity) => void,
   ): ConnectableSession {
-    const handlers = createHandlers(onActivity);
+    const handlers = this.createHandlers(chatId, (entry) => this.options.onActivity(chatId, entry));
     const storeChunk = (id: number, messageId: string | null, text: string) => {
       this.messageStoreHandler(id, messageId, text);
     };
@@ -294,9 +297,8 @@ export class AgentHost {
     provider: CliProvider,
     command: string,
     existingSessionId: string | undefined,
-    onActivity: (entry: ChatActivity) => void,
   ): Promise<Spawned> {
-    const client = this.createClient(chatId, provider, command, existingSessionId, onActivity);
+    const client = this.createClient(chatId, provider, command, existingSessionId);
     this.agents.set(chatId, { client, ready: false, provider });
     try {
       await client.connect();
@@ -333,9 +335,8 @@ export class AgentHost {
     chatId: number;
     sessionId: string;
     provider: CliProvider;
-    onActivity: (entry: ChatActivity) => void;
   }): Promise<AgentResult> {
-    const { chatId, sessionId, provider, onActivity } = input;
+    const { chatId, sessionId, provider } = input;
     const claim = await this.options.claimProvider(chatId, provider);
     if (claim.ok === false) {
       return {
@@ -376,9 +377,9 @@ export class AgentHost {
     }
 
     const storedId = sessionId.length > 0 ? sessionId : undefined;
-    let spawned = await this.spawnAgent(chatId, provider, command, storedId, onActivity);
+    let spawned = await this.spawnAgent(chatId, provider, command, storedId);
     if (spawned.ok === false && storedId) {
-      spawned = await this.spawnAgent(chatId, provider, command, undefined, onActivity);
+      spawned = await this.spawnAgent(chatId, provider, command, undefined);
     }
     if (spawned.ok === false) {
       return failureResult(provider, spawned.sessionId, spawned.error);

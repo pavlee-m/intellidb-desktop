@@ -38,6 +38,7 @@ import { deriveInitialChatTitle } from '@/lib/chatTitle'
 import type { Model } from '@/interfaces/Model'
 import { turnConfigFromProperties, type TurnConfig } from '@/lib/turnConfig'
 import useSettingsStore from '@/stores/settingsStore'
+import type { RequestPermissionRequest } from '@agentclientprotocol/sdk'
 
 function choiceKey(model: Model): string {
   return `${model.provider}:${model.id}`
@@ -89,8 +90,9 @@ function ActivityEntry({ entry }: { entry: ChatActivity }) {
         </div>
       )
     case 'plan':
+      console.log("PLAN!");
       return (
-        <div className="self-start whitespace-pre-wrap text-sm">{entry.text}</div>
+        <div className="self-start whitespace-pre-wrap text-sm">PLAN! {entry.text}</div>
       )
     default: {
       const _exhaustive: never = entry.kind
@@ -115,6 +117,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const [waitForInitialActivity, setWaitForInitialActivity] = useState(chatId === -1 ? false: true)
   const [input, setInput] = useState('')
   const [isSending, setIsSending] = useState(false)
+  const [permissionRequest, setPermissionRequest] = useState<RequestPermissionRequest | null>(null)
   const chatProperties = useGlobalStore((state) => state.chatProperties[chatId]);
   const allModels = useModelsStore((state) => state.models)
   const settings = useSettingsStore((state) => state.settings)
@@ -197,6 +200,8 @@ export default function ChatView({ chatId }: ChatViewProps) {
       if (activityChatId === chatId) setWaitForInitialActivity(false)
     })
   }, [chatId])
+
+  useEffect(() => window.agentApi.onPermissionChange(chatId, setPermissionRequest), [chatId])
 
   useEffect(() => {
     // Default to the first available model once one exists.
@@ -449,6 +454,36 @@ export default function ChatView({ chatId }: ChatViewProps) {
         </div>
       )}
       <div className="border-t p-3">
+        {permissionRequest ? (
+          <div className="mb-3 flex flex-col items-start gap-2">
+            <p className="text-sm" role="status">
+              {permissionRequest.toolCall.title || 'Permission required'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {permissionRequest.options.map((option) => (
+                <Button
+                  key={option.optionId}
+                  size="sm"
+                  variant={option.kind === 'reject_once' || option.kind === 'reject_always' ? 'outline' : 'default'}
+                  onClick={() => {
+                    void window.agentApi.selectPermission(chatId, option.optionId)
+                  }}
+                >
+                  {option.name}
+                </Button>
+              ))}
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  void window.agentApi.dismissPermission(chatId)
+                }}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {providerBlocked ? (
           <div className="mb-3 flex flex-col items-start gap-2">
             <p className="text-sm text-muted-foreground" role="status">
