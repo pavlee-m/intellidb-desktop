@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Plug, Send, X } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
 import { toast } from 'sonner'
 import type ChatActivity from '@/interfaces/ChatActivity'
 import useChatActivityStore from '@/stores/chatActivityStore'
+import UserActivity from '@/components/index/UserActivity'
+import AgentMessageActivity from '@/components/index/AgentMessageActivity'
+import AgentThoughtActivity from '@/components/index/AgentThoughtActivity'
+import ToolActivity from '@/components/index/ToolActivity'
+import PlanActivity from '@/components/index/PlanActivity'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import {
@@ -52,50 +56,20 @@ interface ChatViewProps {
 // which useSyncExternalStore treats as a state change and loops forever.
 const NO_ENTRIES: ChatActivity[] = []
 
-function processUserMessage(message: string): string {
-  const lines = message.split('\n')
-  if (lines[0]?.startsWith('dangerousQueries:') && lines[1]?.startsWith('connectionId:')) {
-    return lines.slice(2).join('\n')
-  }
-  return message
-}
-
 function ActivityEntry({ entry }: { entry: ChatActivity }) {
   switch (entry.kind) {
     case 'user':
-      return (
-        <div className="max-w-[80%] self-end whitespace-pre-wrap rounded-lg bg-muted px-3 py-2">
-          {processUserMessage(entry.text) || entry.text}
-        </div>
-      )
+      return <UserActivity entry={entry} />
     case 'agent_message':
-      return (
-        <div className="chat-markdown self-start">
-          <ReactMarkdown>{entry.text}</ReactMarkdown>
-        </div>
-      )
+      return <AgentMessageActivity entry={entry} />
     case 'agent_thought':
-      return (
-        <div className="self-start text-sm italic text-muted-foreground">
-          {entry.text}
-        </div>
-      )
+      return <AgentThoughtActivity entry={entry} />
     case 'tool':
-      return (
-        <div className="self-start text-sm">
-          {entry.text}
-          {entry.status ? (
-            <span className="text-xs text-muted-foreground"> ({entry.status})</span>
-          ) : null}
-        </div>
-      )
+      return <ToolActivity entry={entry} />
     case 'plan':
-      console.log("PLAN!");
-      return (
-        <div className="self-start whitespace-pre-wrap text-sm">PLAN! {entry.text}</div>
-      )
+      return <PlanActivity entry={entry} />
     default: {
-      const _exhaustive: never = entry.kind
+      const _exhaustive: never = entry
       return _exhaustive
     }
   }

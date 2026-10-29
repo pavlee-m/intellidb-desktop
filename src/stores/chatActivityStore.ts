@@ -35,11 +35,12 @@ const useChatActivityStore = create<ChatActivityState>((set) => ({
       const last = current[current.length - 1]
       let next: ChatActivity[]
 
-      if (
-        (entry.kind === 'agent_message' || entry.kind === 'agent_thought') &&
-        last &&
-        last.kind === entry.kind
-      ) {
+      if (entry.kind === 'agent_message' && last?.kind === 'agent_message') {
+        next = [
+          ...current.slice(0, -1),
+          { ...last, text: last.text + entry.text },
+        ]
+      } else if (entry.kind === 'agent_thought' && last?.kind === 'agent_thought') {
         next = [
           ...current.slice(0, -1),
           { ...last, text: last.text + entry.text },
@@ -51,7 +52,7 @@ const useChatActivityStore = create<ChatActivityState>((set) => ({
             ? [...current, entry]
             : current.map((item, index) => (index === existingIndex ? entry : item))
       } else if (entry.kind === 'plan') {
-        const existingIndex = current.findIndex((item) => item.key === 'plan')
+        const existingIndex = current.findIndex((item) => item.kind === 'plan')
         next =
           existingIndex === -1
             ? [...current, entry]

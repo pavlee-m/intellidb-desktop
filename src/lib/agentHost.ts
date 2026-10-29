@@ -140,7 +140,7 @@ export class AgentHost {
   }
 
   createHandlers(chatId: number, onActivity: (entry: ChatActivity) => void): ACPClientHandlers {
-    const toolEntries = new Map<string, ChatActivity>();
+    const toolEntries = new Map<string, Extract<ChatActivity, { kind: 'tool' }>>();
 
     return {
       handleRequestPermission: async (params) => {
@@ -168,14 +168,20 @@ export class AgentHost {
         });
       },
       onUserMessageChunk: (update) => {
+        const raw = update.content.type === 'text' ? update.content.text : '';
+        const lines = raw.split('\n');
+        const stripped =
+          lines[0]?.startsWith('dangerousQueries:') && lines[1]?.startsWith('connectionId:')
+            ? lines.slice(2).join('\n')
+            : raw;
         onActivity({
           key: '',
           kind: 'user',
-          text: update.content.type === 'text' ? update.content.text : '',
+          text: stripped || raw,
         });
       },
       onToolCall: (update) => {
-        const entry: ChatActivity = {
+        const entry: Extract<ChatActivity, { kind: 'tool' }> = {
           key: update.toolCallId,
           kind: 'tool',
           text: update.title,
@@ -186,7 +192,7 @@ export class AgentHost {
       },
       onToolCallUpdate: (update) => {
         const existing = toolEntries.get(update.toolCallId);
-        const entry: ChatActivity = {
+        const entry: Extract<ChatActivity, { kind: 'tool' }> = {
           key: update.toolCallId,
           kind: 'tool',
           text: update.title ?? existing?.text ?? '',
@@ -199,13 +205,8 @@ export class AgentHost {
         onActivity({
           key: 'plan',
           kind: 'plan',
-          text: update.entries
-            .map((entry) => `${entry.content} (${entry.status})`)
-            .join('\n'),
+          steps: update.entries.map((entry) => ({ content: entry.content, status: entry.status })),
         });
-      onOtherUpdate: (update:any) => {
-        console.log('onOtherUpdate', update);
-      }
       },
       onAvailableCommandsUpdate: () => undefined,
     };
