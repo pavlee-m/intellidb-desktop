@@ -1,5 +1,6 @@
 import { Check, Circle, ListChecks } from 'lucide-react'
-import type ChatActivity, { PlanStep } from '@/interfaces/ChatActivity'
+import type ChatActivity from '@/interfaces/ChatActivity'
+import type { PlanStep } from '@/interfaces/ChatActivity'
 import { Spinner } from '@/components/ui/spinner'
 
 function PlanStepMark({ status }: { status: PlanStep['status'] }) {
