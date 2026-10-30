@@ -183,8 +183,10 @@ export default function ConnectionDialog({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="mssql">MS SQL Server</SelectItem>
-                        {/* <SelectItem value="mysql">MySQL</SelectItem> */}
-                        {/* <SelectItem value="postgresql">PostgreSQL</SelectItem> */}
+                        <SelectItem value="mysql+pymysql">MySQL</SelectItem>
+                        <SelectItem value="mariadb+mariadbconnector">MariaDB</SelectItem>
+                        <SelectItem value="postgresql+psycopg">PostgreSQL</SelectItem>
+                        <SelectItem value="db2+ibm_db">IBM DB2</SelectItem>
                       </SelectContent>
                     </Select>
                   </Field>

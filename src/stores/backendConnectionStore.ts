@@ -14,8 +14,12 @@ const useBackendConnectionStore = create<BackendConnectionState>((set) => ({
   editConnection: (connection) =>
     set((state) => ({
       backendConnections: state.backendConnections.map((existingConnection) =>
-        existingConnection.backendConnectionId === connection.backendConnectionId
-          ? connection
+        existingConnection.connection.id === connection.connection.id
+          ? {
+              ...existingConnection,
+              backendConnectionId: connection.backendConnectionId,
+              connection: connection.connection,
+            }
           : existingConnection,
       ),
     })),

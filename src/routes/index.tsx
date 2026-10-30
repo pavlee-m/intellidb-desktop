@@ -42,6 +42,10 @@ import { getProviderCliCommand, type CliCommandCheckResult } from '@/lib/cliComm
 import { resolveProviderReadiness } from '@/lib/providerReadiness'
 import ChatView from '@/components/index/ChatView'
 import { Spinner } from '@/components/ui/spinner'
+import mysqlLogo from '@/assets/mysql.svg'
+import mariadbLogo from '@/assets/mariadb.svg'
+import postgresqlLogo from '@/assets/postgresql.svg'
+import db2Logo from '@/assets/ibmdb2.svg'
 
 function getDbmsLogo(dbms: string): { src?: string; alt: string } {
   const normalizedDbms = dbms.trim().toLowerCase()
@@ -50,6 +54,20 @@ function getDbmsLogo(dbms: string): { src?: string; alt: string } {
     return { src: mssqlLogo, alt: 'MS SQL Server' }
   }
 
+  if (normalizedDbms === 'mysql+pymysql' || normalizedDbms === 'mysql' || normalizedDbms === 'mysql server') {
+    return { src: mysqlLogo, alt: 'MySQL' }
+  }
+
+  if (normalizedDbms === 'mariadb+mariadbconnector' || normalizedDbms === 'mariadb' || normalizedDbms === 'mariadb server') {
+    return { src: mariadbLogo, alt: 'MariaDB' }
+  }
+
+  if (normalizedDbms === 'postgresql+psycopg' || normalizedDbms === 'postgresql' || normalizedDbms === 'postgresql server') {
+    return { src: postgresqlLogo, alt: 'PostgreSQL' }
+  }
+  if (normalizedDbms === 'db2+ibm_db' || normalizedDbms === 'db2' || normalizedDbms === 'db2 server') {
+    return { src: db2Logo, alt: 'IBM DB2' }
+  }
   return { alt: dbms }
 }
 
@@ -341,7 +359,7 @@ function Index() {
                   </Button>
                 )
                 return (
-                  <SidebarMenuItem key={backendConnectionId}>
+                  <SidebarMenuItem key={connection.id}>
                     <Collapsible
                       className="group w-full rounded-md"
                       open={openByConnectionId[connection.id] ?? false}

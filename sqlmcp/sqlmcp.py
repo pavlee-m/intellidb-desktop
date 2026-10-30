@@ -1,11 +1,10 @@
 from argparse import ArgumentParser, ArgumentTypeError
 from dataclasses import dataclass
 from typing import Sequence
-
 from objects import ExecuteSqlResult
 from helpers import utils
 from fastmcp import FastMCP
-from sqlalchemy import URL, create_engine, text
+from sqlalchemy import URL, create_engine, select, text
 from sqlalchemy.engine import Engine
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -14,7 +13,7 @@ mcp = FastMCP("sqlmcp")
 http_subserver = FastMCP("http_subserver")
 mcp.mount(http_subserver, namespace="http")
 DB_CONNECTIONS = {}
-SUPPORTED_DBMS = ['mssql']
+SUPPORTED_DBMS = ['mssql', 'mysql+pymysql', 'mariadb+mariadbconnector', 'postgresql+psycopg', "db2+ibm_db"]
 
 
 @dataclass(frozen=True)
@@ -63,7 +62,7 @@ def create_db_engine(dbms: str, username: str, password: str, database: str, hos
     )
     engine = create_engine(url)
     with engine.connect() as connection:
-        connection.execute(text("SELECT 1"))
+        connection.execute(select(1))
     return engine
 
 @http_subserver.custom_route("/connect_db", methods=["POST"])
