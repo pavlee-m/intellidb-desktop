@@ -1,4 +1,5 @@
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type ChatActivity from '@/interfaces/ChatActivity'
 
 export default function AgentMessageActivity({
@@ -8,7 +9,7 @@ export default function AgentMessageActivity({
 }) {
   return (
     <div className="chat-markdown self-start">
-      <ReactMarkdown>{entry.text}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{entry.text}</ReactMarkdown>
     </div>
   )
 }
