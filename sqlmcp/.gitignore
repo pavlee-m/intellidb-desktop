@@ -15,3 +15,5 @@ sqlmcp.build
 sqlmcp.dist
 sqlmcp.onefile-build
 sqlmcp.bin
+
+.ftok

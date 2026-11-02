@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import started from 'electron-squirrel-startup';
 import { open } from 'sqlite';
 import sqlite3 from 'sqlite3';
-import DBManager from './lib/DBManager';
+import DBManager from './lib/dbManager';
 import Settings from './interfaces/Settings';
 import Connection from './interfaces/Connection';
 import { ChildProcess, execFile, spawn } from 'node:child_process';
