@@ -95,3 +95,5 @@ src/server
 src/backend/sqlmcp.bin
 
 dist/
+
+.cursor/skills/verify-intellidb/evidence
