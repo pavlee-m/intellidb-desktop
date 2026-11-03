@@ -19,8 +19,7 @@ Like Claude Code and Codex that decreased the need for a code editor, IntelliDB 
 - **Dangerous queries gate.** A dedicated switch for destructive operations, so `DROP` and friends never sneak through a casual prompt.
 - **Multi-engine connections.** SQL Server, MySQL, MariaDB, PostgreSQL and IBM DB2 (via SQLAlchemy), with custom SQLAlchemy connection-query parameters (driver, `TrustServerCertificate`, …) per connection.
 - **Credentials stay local.** Connections are stored in a local SQLite config DB; passwords are kept in the OS keyring (gnome-keyring/KWallet/Windows credential store). No cloud, no accounts.
-- **Connection lifecycle at a glance.** Status dots show Disconnected / Connecting / Connected; connect, disconnect, edit and delete from a context menu.
-- **Model choice.** Pick the model the agent works with — Composer, GPT, Claude, Gemini, Grok and more — straight from the chat footer.
+- **Model choice.** Pick the models from providers you most likely already use.
 - **Chat management.** Search, rename, delete, and lazily-loaded thread lists; history and session IDs persist across restarts in the local config DB.
 - **Dark and light themes.** The whole UI (React 19 + Tailwind 4 + shadcn/Radix) respects your theme, switchable in Settings.
 
