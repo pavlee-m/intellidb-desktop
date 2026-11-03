@@ -90,13 +90,13 @@ desktop/intellidb/
 ### Prerequisites
 
 - Node.js ≥ 22 (or [Bun](https://bun.sh)) and npm
-- A database server to connect to (SQL Server, MySQL/MariaDB, PostgreSQL, or DB2)
+- A database server to connect to (SQL Server, MySQL/MariaDB, PostgreSQL, or DB2, Oracle will be added shortly)
 
 ### Run in development
 
 ```bash
-npm install
-npm run start        # electron-forge start — builds main/preload/renderer with Vite
+bun install
+bun run start        # electron-forge start — builds main/preload/renderer with Vite
 ```
 
 The app starts its bundled backend automatically (`src/backend/sqlmcp.bin` → `127.0.0.1:8000`). If you change the Python backend, rebuild the binary with `sqlmcp/compile.sh` and copy it into `src/backend/`.
