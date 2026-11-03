@@ -4,7 +4,6 @@ import type { AgentResult, AgentSession } from '@/interfaces/AgentSession';
 import { CursorClient } from '@/acp/CursorClient';
 import { OpenCodeClient } from '@/acp/OpenCodeClient';
 import { checkCliCommand } from '@/lib/cliCommandCheck';
-import type { CliProvider } from '@/lib/cliCommand';
 import { readOpenCodeAuth } from '@/lib/openCodeAuth';
 import { sameTurnConfig, type TurnConfig } from '@/lib/turnConfig';
 import type MessageModel from '@/models/MessageModel';
@@ -12,7 +11,7 @@ import type * as acp from '@agentclientprotocol/sdk';
 
 export type ClaimResult =
   | { ok: true }
-  | { ok: false; stored: CliProvider | null };
+  | { ok: false; stored: string | null };
 
 // Writes one message row. Role is 0 for the user and 1 for the assistant.
 export type StoreMessages = (
@@ -25,8 +24,8 @@ export type StoreMessages = (
 export interface AgentHostOptions {
   mcpServers: acp.McpServer[];
   persistSessionId: (chatId: number, sessionId: string) => Promise<void>;
-  claimProvider: (chatId: number, provider: CliProvider) => Promise<ClaimResult>;
-  resolveCli: (provider: CliProvider) => Promise<string>;
+  claimProvider: (chatId: number, provider: string) => Promise<ClaimResult>;
+  resolveCli: (provider: string) => Promise<string>;
   storeMessage: StoreMessages;
   getMessage: (messageId: string) => Promise<MessageModel | undefined>;
   onActivity: (chatId: number, entry: ChatActivity) => void;
@@ -37,7 +36,7 @@ export interface AgentHostOptions {
 type LiveAgent = {
   client: AgentSession | undefined;
   ready: boolean;
-  provider: CliProvider;
+  provider: string;
   applied?: TurnConfig;
 };
 
@@ -58,7 +57,7 @@ function liveSessionId(client: AgentSession | undefined): string | null {
 }
 
 function failureResult(
-  provider: CliProvider | null,
+  provider: string | null,
   sessionId: string | null,
   error: unknown,
 ): AgentResult {
@@ -79,7 +78,7 @@ export class AgentHost {
   ensureAgent(input: {
     chatId: number;
     sessionId: string;
-    provider: CliProvider;
+    provider: string;
   }): Promise<AgentResult> {
     const pending = this.pendingConnects.get(input.chatId);
     if (pending) {
@@ -275,7 +274,7 @@ export class AgentHost {
 
   private createClient(
     chatId: number,
-    provider: CliProvider,
+    provider: string,
     command: string,
     existingSessionId: string | undefined,
   ): ConnectableSession {
@@ -289,13 +288,12 @@ export class AgentHost {
     if (provider === 'opencode') {
       return new OpenCodeClient(chatId, storeChunk, handlers, command, existingSessionId, this.options.mcpServers);
     }
-    const _exhaustive: never = provider;
-    return _exhaustive;
+    throw new Error(`Unknown provider: ${provider}`);
   }
 
   private async spawnAgent(
     chatId: number,
-    provider: CliProvider,
+    provider: string,
     command: string,
     existingSessionId: string | undefined,
   ): Promise<Spawned> {
@@ -320,7 +318,7 @@ export class AgentHost {
 
   private async rememberSession(
     chatId: number,
-    provider: CliProvider,
+    provider: string,
     client: AgentSession,
   ): Promise<AgentResult> {
     const sessionId = client.getSessionId();
@@ -335,7 +333,7 @@ export class AgentHost {
   private async connectAgent(input: {
     chatId: number;
     sessionId: string;
-    provider: CliProvider;
+    provider: string;
   }): Promise<AgentResult> {
     const { chatId, sessionId, provider } = input;
     const claim = await this.options.claimProvider(chatId, provider);

@@ -1,20 +1,13 @@
 import { execFileSync } from 'node:child_process';
 
-type KeyringBackendId = 'gnome-libsecret' | 'kwallet6' | 'kwallet5' | 'kwallet';
-
-interface KeyringBackend {
-  id: KeyringBackendId;
-  dbusName: string;
-}
-
-const KEYRING_BACKENDS: readonly KeyringBackend[] = [
+const KEYRING_BACKENDS = [
   { id: 'gnome-libsecret', dbusName: 'org.freedesktop.secrets' },
   { id: 'kwallet6', dbusName: 'org.kde.kwalletd6' },
   { id: 'kwallet5', dbusName: 'org.kde.kwalletd5' },
   { id: 'kwallet', dbusName: 'org.kde.kwalletd' },
 ];
 
-export function getAvailableKeyringBackend(): KeyringBackendId | null {
+export function getAvailableKeyringBackend(): string | null {
   try {
     const stdout = execFileSync(
       'dbus-send',

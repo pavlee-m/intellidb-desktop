@@ -1,21 +1,11 @@
 import type Settings from '@/interfaces/Settings'
-import { DEFAULT_CURSOR_CLI_COMMAND } from '@/lib/cursorCliCommand'
-
-type CliCommandFailureReason =
-  | 'empty'
-  | 'invalid'
-  | 'not-found'
-  | 'not-a-file'
-  | 'not-executable'
-  | 'inaccessible'
+import { DEFAULT_CURSOR_CLI_COMMAND } from '@/constants/cliDefaults'
 
 export type CliCommandCheckResult =
   | { ok: true; resolvedPath: string }
-  | { ok: false; reason: CliCommandFailureReason; message: string }
+  | { ok: false; reason: string; message: string }
 
-export type CliProvider = 'cursor' | 'opencode'
-
-export const PROVIDER_CLI: Record<CliProvider, {
+export const PROVIDER_CLI: Record<string, {
   settingKey: 'cursor_cli_binary' | 'opencode_binary'
   fallback: string
   label: string
@@ -38,7 +28,7 @@ function normalizeCliCommand(raw: string | null | undefined, fallback: string): 
 }
 
 export function getProviderCliCommand(
-  provider: CliProvider,
+  provider: string,
   settings: Pick<Settings, 'cursor_cli_binary' | 'opencode_binary'>,
 ): string {
   const mapping = PROVIDER_CLI[provider]

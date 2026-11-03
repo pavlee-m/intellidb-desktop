@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { Input } from '@/components/ui/input'
-import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND } from '@/lib/cursorCliCommand'
+import { DEFAULT_CURSOR_CLI_COMMAND } from '@/constants/cliDefaults'
 import useSettingsStore from '@/stores/settingsStore';
 import opencodeLogo from '@/assets/opencode.svg';
 import cursorLogo from '@/assets/cursor.svg';
@@ -102,7 +102,7 @@ function IntegrationsPage() {
     const trimmedBinary = cursorCliBinaryPath.trim()
     const nextBinary = trimmedBinary.length > 0 ? trimmedBinary : DEFAULT_CURSOR_CLI_COMMAND
     setCursorCliBinaryPath(nextBinary)
-    window.settingsApi.updateSetting(CURSOR_CLI_BINARY_KEY, nextBinary).then(setSettings).catch(console.error);
+    window.settingsApi.updateSetting("cursor_cli_binary", nextBinary).then(setSettings).catch(console.error);
   }
 
   return (

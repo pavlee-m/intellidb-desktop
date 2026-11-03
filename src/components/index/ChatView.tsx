@@ -36,17 +36,27 @@ import useGlobalStore from '@/stores/globalStore'
 import useBackendConnectionStore from '@/stores/backendConnectionStore'
 import useModelsStore from '@/stores/modelsStore'
 import { Spinner } from '@/components/ui/spinner'
-import { getProviderCliCommand, type CliProvider } from '@/lib/cliCommand'
+import { getProviderCliCommand } from '@/lib/cliCommand'
 import { useProviderReadiness } from '@/lib/providerReadiness'
-import { deriveInitialChatTitle } from '@/lib/chatTitle'
 import type { Model } from '@/interfaces/Model'
 import { turnConfigFromProperties, type TurnConfig } from '@/lib/turnConfig'
 import useSettingsStore from '@/stores/settingsStore'
 import type { RequestPermissionRequest } from '@agentclientprotocol/sdk'
 
+
 function choiceKey(model: Model): string {
   return `${model.provider}:${model.id}`
 }
+
+const MAX_INITIAL_CHAT_TITLE_LENGTH = 20
+const INITIAL_CHAT_TITLE_ELLIPSIS = '...'
+function deriveInitialChatTitle(question: string): string {
+  const normalized = question.trim().replace(/\s+/g, ' ')
+  if (normalized.length <= MAX_INITIAL_CHAT_TITLE_LENGTH) return normalized
+  const bodyLength = MAX_INITIAL_CHAT_TITLE_LENGTH - INITIAL_CHAT_TITLE_ELLIPSIS.length
+  return normalized.slice(0, bodyLength) + INITIAL_CHAT_TITLE_ELLIPSIS
+}
+
 
 interface ChatViewProps {
   chatId: number
@@ -119,7 +129,7 @@ export default function ChatView({ chatId }: ChatViewProps) {
   const mode = isSending ? 'stop' : 'send'
   const isWaitingForActivity = waitForInitialActivity
 
-  const lockedProvider: '' | CliProvider =
+  const lockedProvider: '' | string =
     currentChat?.provider === 'cursor' || currentChat?.provider === 'opencode'
       ? currentChat.provider
       : ''

@@ -4,11 +4,10 @@ import {
   getProviderCliCommand,
   PROVIDER_CLI,
   type CliCommandCheckResult,
-  type CliProvider,
 } from '@/lib/cliCommand'
 import useSettingsStore from '@/stores/settingsStore'
 
-const CLI_PROVIDERS = Object.keys(PROVIDER_CLI) as CliProvider[]
+const CLI_PROVIDERS = Object.keys(PROVIDER_CLI)
 
 type ProviderReadiness =
   | { status: 'checking' }
@@ -16,23 +15,22 @@ type ProviderReadiness =
   | { status: 'no-provider'; message: string }
   | { status: 'cli-unavailable'; message: string }
 
-function isIntegrationEnabled(provider: CliProvider, settings: Settings): boolean {
+function isIntegrationEnabled(provider: string, settings: Settings): boolean {
   switch (provider) {
     case 'cursor':
       return settings.cursor_cli_integration_enabled
     case 'opencode':
       return settings.opencode_integration_enabled
     default: {
-      const _exhaustive: never = provider
-      return _exhaustive
+      throw new Error(`Unknown provider: ${provider}`);
     }
   }
 }
 
 export function resolveProviderReadiness(input: {
-  lockedProvider: '' | CliProvider
+  lockedProvider: '' | string
   settings: Settings | null
-  cliResults: Partial<Record<CliProvider, CliCommandCheckResult>>
+  cliResults: Partial<Record<string, CliCommandCheckResult>>
 }): ProviderReadiness {
   const { lockedProvider, settings, cliResults } = input
   if (settings === null) {
@@ -87,9 +85,9 @@ function failedCheckResult(error: unknown): CliCommandCheckResult {
   }
 }
 
-export function useProviderReadiness(lockedProvider: '' | CliProvider): ProviderReadiness {
+export function useProviderReadiness(lockedProvider: '' | string): ProviderReadiness {
   const settings = useSettingsStore((state) => state.settings)
-  const [cliResults, setCliResults] = useState<Partial<Record<CliProvider, CliCommandCheckResult>>>({})
+  const [cliResults, setCliResults] = useState<Partial<Record<string, CliCommandCheckResult>>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -98,7 +96,7 @@ export function useProviderReadiness(lockedProvider: '' | CliProvider): Provider
       return
     }
 
-    const providers: CliProvider[] = lockedProvider ? [lockedProvider] : CLI_PROVIDERS
+    const providers: string[] = lockedProvider ? [lockedProvider] : CLI_PROVIDERS
 
     void Promise.all(providers.map(async (provider) => {
       try {

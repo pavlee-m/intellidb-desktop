@@ -1,7 +1,5 @@
 import Settings from '@/interfaces/Settings';
-import type { CliProvider } from '@/lib/cliCommand';
 import type { ClaimResult } from '@/lib/agentHost';
-import { CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND, parseCursorCliCommand, type CursorCliCommand } from '@/lib/cursorCliCommand';
 import { DEFAULT_SQLMCP_PORT, parseSqlmcpPort } from '@/lib/sqlmcpPort';
 import SettingsModel from '../models/SettingsModel';
 import { Database } from 'sqlite';
@@ -9,7 +7,57 @@ import ChatModel from '../models/ChatModel';
 import MessageModel from '../models/MessageModel';
 import Connection from '@/interfaces/Connection';
 import type ChatSearchHit from '@/interfaces/ChatSearchHit';
-import { cutSnippet } from '@/lib/chatSnippet';
+import { DEFAULT_CURSOR_CLI_COMMAND, DEFAULT_OPENCODE_CLI_COMMAND } from '@/constants/cliDefaults';
+
+const SNIPPET_MAX_LENGTH = 160
+function cutSnippet(
+  messageText: string,
+  matchStart: number,
+  matchLength: number,
+): string {
+  const textLength = messageText.length
+  if (textLength === 0) {
+    return ''
+  }
+
+  let from: number
+  let to: number
+
+  if (matchStart < 0 || matchStart >= textLength) {
+    from = 0
+    to = Math.min(SNIPPET_MAX_LENGTH, textLength)
+  } else {
+    const matchEnd = Math.min(textLength, matchStart + Math.max(0, matchLength))
+    const matchSpan = matchEnd - matchStart
+    if (matchSpan >= SNIPPET_MAX_LENGTH) {
+      from = matchStart
+      to = Math.min(textLength, matchStart + SNIPPET_MAX_LENGTH)
+    } else {
+      const extra = SNIPPET_MAX_LENGTH - matchSpan
+      const before = Math.floor(extra / 2)
+      from = matchStart - before
+      to = matchEnd + (extra - before)
+      if (from < 0) {
+        to = Math.min(textLength, to - from)
+        from = 0
+      }
+      if (to > textLength) {
+        from = Math.max(0, from - (to - textLength))
+        to = textLength
+      }
+    }
+  }
+
+  const body = messageText.slice(from, to).replace(/\s+/g, ' ')
+  const prefix = from > 0 ? '...' : ''
+  const suffix = to < textLength ? '...' : ''
+  return prefix + body + suffix
+}
+
+function parseCliCommand(raw: string | null | undefined): string {
+  const trimmed = raw?.trim() ?? ''
+  return trimmed
+}
 
 type ConnectionRow = Omit<Connection, 'sqlalchemy_query'> & {
   sqlalchemy_query: string | null;
@@ -26,7 +74,7 @@ type ChatSearchRow = {
   matchStart: number;
 };
 
-function knownProvider(value: string | null): CliProvider | null {
+function knownProvider(value: string | null): string | null {
   if (value === 'cursor' || value === 'opencode') {
     return value;
   }
@@ -335,9 +383,9 @@ class DBManager {
     const defaults: [string, string][] = [
       ['theme', 'light'],
       ['opencode_integration_enabled', 'false'],
-      ['opencode_binary', 'opencode'],
+      ["opencode_binary", DEFAULT_OPENCODE_CLI_COMMAND],
       ['cursor_cli_integration_enabled', 'false'],
-      [CURSOR_CLI_BINARY_KEY, DEFAULT_CURSOR_CLI_COMMAND],
+      ["cursor_cli_binary", DEFAULT_CURSOR_CLI_COMMAND],
       ['sqlmcp_port', String(DEFAULT_SQLMCP_PORT)],
     ];
 
@@ -367,7 +415,7 @@ class DBManager {
     await this.db.run(`UPDATE Chat SET Provider = '' WHERE Provider IS NULL`);
   }
 
-  async claimChatProvider(chatId: number, provider: CliProvider): Promise<ClaimResult> {
+  async claimChatProvider(chatId: number, provider: string): Promise<ClaimResult> {
     const row = await this.db.get<{ provider: string | null }>(
       `
         SELECT Provider AS provider
@@ -495,22 +543,22 @@ class DBManager {
       opencode_integration_enabled: settingsObject.opencode_integration_enabled ?? true,
       opencode_binary: settingsObject.opencode_binary ?? 'opencode',
       cursor_cli_integration_enabled: settingsObject.cursor_cli_integration_enabled ?? true,
-      cursor_cli_binary: parseCursorCliCommand(settingsObject.cursor_cli_binary),
+      cursor_cli_binary: parseCliCommand(settingsObject.cursor_cli_binary) ?? DEFAULT_CURSOR_CLI_COMMAND,
       sqlmcp_port: parseSqlmcpPort(storedSqlmcpPort ?? '') ?? DEFAULT_SQLMCP_PORT,
     };
   }
 
-  async getCursorCliCommand(): Promise<CursorCliCommand> {
+  async getCursorCliCommand(): Promise<string> {
     const row = await this.db.get<SettingsModel>(
       `
         SELECT Value AS value
         FROM Settings
         WHERE Key = ?;
       `,
-      [CURSOR_CLI_BINARY_KEY],
+      ["cursor_cli_binary"],
     );
 
-    return parseCursorCliCommand(row?.value);
+    return parseCliCommand(row?.value) ?? DEFAULT_CURSOR_CLI_COMMAND;
   }
 
   async updateSetting(key: string, value: string): Promise<void> {

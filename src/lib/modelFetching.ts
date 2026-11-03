@@ -3,8 +3,7 @@ import { promisify } from 'node:util'
 import { z } from 'zod'
 import {
   DEFAULT_CURSOR_CLI_COMMAND,
-  type CursorCliCommand,
-} from '@/lib/cursorCliCommand'
+} from '@/constants/cliDefaults'
 import { readOpenCodeAuth } from '@/lib/openCodeAuth'
 import {
   isOpenCodeModelId,
@@ -196,7 +195,7 @@ function parseModelCatalog(stdout: string): CursorModel[] {
 }
 
 export async function fetchCursorModels(
-  cliCommand: CursorCliCommand = DEFAULT_CURSOR_CLI_COMMAND,
+  cliCommand: string = DEFAULT_CURSOR_CLI_COMMAND,
 ): Promise<CursorModel[]> {
   let stdout: string
   try {

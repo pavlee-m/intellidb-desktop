@@ -5,7 +5,6 @@ import {
   type OpenCodeVariant,
   type ReasoningOption,
 } from '@/interfaces/Model'
-import type { CliProvider } from '@/lib/cliCommand'
 import type { SessionMode } from '@/interfaces/SessionMode'
 
 export type TurnConfig =
@@ -73,7 +72,7 @@ export function sameTurnConfig(applied: TurnConfig, next: TurnConfig): boolean {
     && applied.variant === next.variant
 }
 
-export function parseCliProvider(input: unknown): CliProvider {
+export function parseCliProvider(input: unknown): string {
   if (input === 'cursor' || input === 'opencode') {
     return input
   }

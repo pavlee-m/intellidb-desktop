@@ -17,3 +17,6 @@ sqlmcp.onefile-build
 sqlmcp.bin
 
 .ftok
+
+nuitka*/
+db2dump/
